@@ -7,17 +7,11 @@ import csv
 import pydicom
 import numpy as np
 import os
-import json
-import operator
 import random
-import time
-import math
-import wave
-
-import signal
-import time
-
-import scipy.io.wavfile
+import os.path
+from model import IMG_SIZE
+from model import IMG_SUBDIVIDE
+from PIL import Image,ImageDraw
 
 kPatientID = 0
 kBoundsX = 1
@@ -28,8 +22,9 @@ kTarget = 5
 
 class DCMGenerator():
 	
-	def __init__(self,directory,labelsFile,forceImageProcessing):
+	def __init__(self,directory,labelsFile):
 		self.directory = directory
+		self.ignoreCaches = False
 		self.labelsFile = labelsFile
 		self.labelsInfo = []
 		
@@ -37,49 +32,75 @@ class DCMGenerator():
 		with open(labelsFile) as csv_file:
 			self.labelsInfo = list(csv.reader(csv_file))
 			self.labelsInfo.pop(0)
-		
-		for patient in self.labelsInfo:
-			self.loadImageForPatientId(patient[kPatientID],forceImageProcessing)
-		
+				
 	
-	def loadImageForPatientId(self,patientId,forceImageProcessing):
+	def loadImageForPatientId(self,patientId):
 		imageData = None
 		
 		# first check if a cached numpy array file already exists
 		cachedFilePath = self.directory + "/" + patientId + ".npy"
 		dcmFilePath = self.directory + "/" + patientId + ".dcm"
-		try:
-			if forceImageProcessing:
-				raise ValueError('Forcing generation of cached image')
-			imageData = np.load(cachedFilePath)
-		except:
+		
+		if self.ignoreCaches == True or os.path.isfile(cachedFilePath) == False:
 			# load the DCM and process it, saving the resulting numpy array to file
 			dcmData = pydicom.read_file(dcmFilePath)
 			imageData = dcmData.pixel_array
 			
 			# preprocess the image (reshape and normalize)
-			imageData = imageData.astype('float32').reshape(1024,1024,1) / 255
+			# 1. resize it to IMG_SIZE (ie downsample)
+			# 2. convert to float32
+			# 3. reshape to greyscale
+			# 4. normalize
+			image = Image.fromarray(imageData).convert("RGB")
+			image = image.resize((IMG_SIZE[0],IMG_SIZE[1]), Image.ANTIALIAS)
+			image = image.convert('L')
+			imageData = np.array(image).astype('float32').reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2]) / 255
 			
 			print("caching image: %s" % cachedFilePath)
 			np.save(cachedFilePath, imageData)
 		
+		if imageData is None and os.path.isfile(cachedFilePath) == True:
+			imageData = np.load(cachedFilePath)
+				
 		return imageData
 		
 	
 	def generateImages(self,num):
-		# grab a random number of images from the source directory
-		input_sounds = np.zeros((num,int(self.sampleRate*self.duration)), dtype='float32')
-		output_sounds = np.zeros((num,2), dtype='float32')
+		randomSelection = True
+		if num <= 0:
+			num = len(self.labelsInfo)
+			randomSelection = False
+		
+		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
+		output = np.zeros((num,1), dtype='float32')
+		
+		for i in range(0,num):
+			patient = random.choice(self.labelsInfo) if randomSelection else self.labelsInfo[i]
+			imageData = self.loadImageForPatientId(patient[kPatientID])
+			np.copyto(input[i], imageData)
+			output[i][0] = patient[kTarget]
 				
-		return input_sounds,output_sounds
+		return input,output
+	
+	def convertOutputToString(self,output):
+		return np.array2string(output.astype(int), separator='.')
+	
 			
 
 if __name__ == '__main__':
 		
-	generator = DCMGenerator("data/stage_1_train_images", "data/stage_1_train_labels.csv", True)
-	#input_sounds,output_sounds = generator.generateImages(5)
+	#generator = DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
+	generator = DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")	
+	generator.ignoreCaches = True
 	
-	#for i in range(0,len(input_sounds)):
-	#	generator.saveSoundToFile("/tmp/generated%d.wav" % (i), input_sounds[i])
+	input,output = generator.generateImages(5)
+	
+	for i in range(0,len(input)):
+		sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
+				
+		#draw = ImageDraw.Draw(sourceImg)
+		#draw.rectangle(generator.GetCoordsFromOutput(output[n],size), outline="green")		
+		
+		sourceImg.save('/tmp/scan_%d_%s.png' % (i, generator.convertOutputToString(output[i])))
 	
 	
