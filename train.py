@@ -41,7 +41,7 @@ def Preprocess():
 	# force all of the images to get cached
 	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")	
 	generator.ignoreCaches = True
-	input,output = generator.generateImages(0)
+	input,output,patientIds = generator.generateImages(0)
 
 def Learn():
 		
@@ -53,7 +53,7 @@ def Learn():
 	print("initializing the generator")
 	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
 	
-	iterations = 10
+	iterations = 1000000
 		
 	print("beginning training")	
 	handler = SignalHandler()
@@ -63,9 +63,9 @@ def Learn():
 		if handler.stop_processing:
 			break
 		
-		n = 1
+		n = 10000
 		print(i)
-		Train(generator,_model,n,20)
+		Train(generator,_model,n,4)
 		i += n
 		
 		if i >= iterations:
@@ -75,7 +75,7 @@ def Learn():
 
 
 def Train(generator,_model,n,epocs):
-	train,label = generator.generateImages(0)
+	train,label,patientIds = generator.generateImages(n)
 	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,validation_split=0.2,verbose=1)
 
 def Test(filename):
@@ -84,7 +84,7 @@ def Test(filename):
 	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
 	
 	if filename is None:
-		input,output = generator.generateImages(64)
+		input,output,patientIds = generator.generateImages(64)
 	else:
 		input,output = generator.generateImagesForPatient(filename)
 	
@@ -98,7 +98,7 @@ def Test(filename):
 		draw.rectangle(generator.coordinatesFromOutput(output[i],IMG_SIZE), outline="green")
 		draw.rectangle(generator.coordinatesFromOutput(results[i],IMG_SIZE), outline="red")
 				
-		sourceImg.save('/tmp/prediction_%d_t%s_p%s.png' % (i, generator.convertOutputToString(output[i]), generator.convertOutputToString(results[i])))
+		sourceImg.save('/tmp/prediction_%s_t%s_p%s.png' % (patientIds[i], generator.convertOutputToString(output[i]), generator.convertOutputToString(results[i])))
 
 def GenerateSubmission():
 	_model = model.createModel(True)
@@ -125,8 +125,8 @@ def GenerateSubmission():
 # TODO:
 # 0100515c-5204-4f31-98e0-f35e4b00004a is a false negative
 # 00436515-870c-4b36-a041-de91049b9ab4 example of not identifying separate peaks
-
-
+# 41bf2042-53a2-44a8-9a29-55e643af5ac0,14a7fbc6-6661-4382-882f-b2aa317cadc0 has full image bounds?
+# a6b830fb-095b-42ad-a700-dd4d2a4241af is false positive and has full image bounds?
 
 
 if __name__ == '__main__':

@@ -84,11 +84,15 @@ class DCMGenerator():
 		
 		random.shuffle(self.labelsInfo)
 		
+		patientIds = []
+		
 		for i in range(0,num):
 			patient = random.choice(self.labelsInfo) if randomSelection else self.labelsInfo[i]
+			patientIds.append(patient[kPatientID])
+			
 			imageData = self.loadImageForPatientId(patient,withBox)
 			np.copyto(input[i], imageData)
-			
+
 			if patient[kTarget] == "1":
 				xmin = float(patient[kBoundsX])
 				ymin = float(patient[kBoundsY])
@@ -107,7 +111,7 @@ class DCMGenerator():
 						if yValue+ydelta >= ymin and yValue <= ymax:
 							output[i][IMG_SUBDIVIDE+y] = 1
 							
-		return input,output
+		return input,output,patientIds
 	
 	def generateImagesForPatient(self,patientID):
 		
@@ -225,7 +229,7 @@ if __name__ == '__main__':
 	generator = DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")	
 	generator.ignoreCaches = True
 	
-	input,output = generator.generateImages(20, True)
+	input,output,patientIds = generator.generateImages(20, True)
 	
 	for i in range(0,len(input)):
 		sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
