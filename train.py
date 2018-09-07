@@ -87,6 +87,7 @@ def Test(filename):
 		input,output,patientIds = generator.generateImages(64)
 	else:
 		input,output = generator.generateImagesForPatient(filename)
+		patientIds = [filename,filename,filename]
 	
 	results = _model.predict(input)
 	
@@ -97,7 +98,7 @@ def Test(filename):
 		draw = ImageDraw.Draw(sourceImg)
 		draw.rectangle(generator.coordinatesFromOutput(output[i],IMG_SIZE), outline="green")
 		draw.rectangle(generator.coordinatesFromOutput(results[i],IMG_SIZE), outline="red")
-				
+		
 		sourceImg.save('/tmp/prediction_%s_t%s_p%s.png' % (patientIds[i], generator.convertOutputToString(output[i]), generator.convertOutputToString(results[i])))
 
 def GenerateSubmission():

@@ -172,8 +172,11 @@ class DCMGenerator():
 		return fileList,input
 	
 	def convertOutputToString(self,output):
-		return 1 if np.max(output) >= 0.5 else 0
-		#return np.array2string(output.astype(int), separator='.')
+		for x in range(0,IMG_SUBDIVIDE):
+			for y in range(0,IMG_SUBDIVIDE):
+				if output[x] >= 0.5 and output[IMG_SUBDIVIDE+y] >= 0.5:
+					return 1
+		return 0
 	
 	def coordinatesFromPatient(self,patient):
 		x = float(patient[kBoundsX])
