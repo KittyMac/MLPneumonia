@@ -33,6 +33,15 @@ class DCMGenerator():
 			with open(labelsFile) as csv_file:
 				self.labelsInfo = list(csv.reader(csv_file))
 				self.labelsInfo.pop(0)
+		else:
+			# generate from file names in directory...
+			self.labelsInfo = []
+			for file in os.listdir(self.directory):
+			    if file.endswith(".dcm"):
+					patient = [os.path.splitext(file)[0], 0, 0, 0, 0, 0]
+					self.labelsInfo.append(patient)
+					
+			
 				
 	
 	def loadImageForPatientId(self,patient,withBox=False):
@@ -114,7 +123,7 @@ class DCMGenerator():
 		return input,output,patientIds
 	
 	def generateImagesForPatient(self,patientID):
-		
+				
 		num = 0
 		for i in range(0,len(self.labelsInfo)):
 			patient = self.labelsInfo[i]
@@ -155,21 +164,16 @@ class DCMGenerator():
 	
 	def generatePredictionImages(self):
 		
-		fileList = []
-		for file in os.listdir(self.directory):
-		    if file.endswith(".dcm"):
-				fileList.append(os.path.splitext(file)[0])
-		
-		num = len(fileList)
+		num = len(self.labelsInfo)
 				
 		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
 				
 		for i in range(0,num):
-			patient = [fileList[i]]
+			patient = self.labelsInfo[i]
 			imageData = self.loadImageForPatientId(patient,False)
 			np.copyto(input[i], imageData)
 										
-		return fileList,input
+		return self.labelsInfo,input
 	
 	def convertOutputToString(self,output):
 		for x in range(0,IMG_SUBDIVIDE):

@@ -82,6 +82,7 @@ def Test(filename):
 	_model = model.createModel(True)
 	
 	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
+	#generator = data.DCMGenerator("data/stage_1_test_images", None)
 	
 	if filename is None:
 		input,output,patientIds = generator.generateImages(64)
@@ -106,21 +107,21 @@ def GenerateSubmission():
 	
 	print("loading submission images")
 	generator = data.DCMGenerator("data/stage_1_test_images", None)
-	fileList,input = generator.generatePredictionImages()
+	patients,input = generator.generatePredictionImages()
 	
 	print("predicting pnemonia")
 	results = _model.predict(input)
 	
 	print("writing results file")
 	outputFile = open("submission.csv", "w")
-	for i in range(0,len(fileList)):
-		print("  ... %s" % fileList[i])
+	for i in range(0,len(patients)):
+		print("  ... %s" % patients[i][0])
 		bounds = generator.coordinatesFromOutput(results[i],IMG_SIZE)
-		confidence = np.max(results[i])
+		confidence = generator.convertOutputToString(results[i])
 		if confidence >= 0.5:
-			outputFile.write("%s,%f %d %d %d %d\n" % (fileList[i],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
+			outputFile.write("%s,%f %d %d %d %d\n" % (patients[i][0],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
 		else:
-			outputFile.write("%s,\n" % fileList[i])
+			outputFile.write("%s,\n" % patients[i][0])
 
 
 # TODO:
