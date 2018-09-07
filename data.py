@@ -109,6 +109,46 @@ class DCMGenerator():
 							
 		return input,output
 	
+	def generateImagesForPatient(self,patientID):
+		
+		num = 0
+		for i in range(0,len(self.labelsInfo)):
+			patient = self.labelsInfo[i]
+			if patient[kPatientID] == patientID:
+				num += 1
+		
+		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
+		output = np.zeros((num,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
+		
+		idx = 0
+		for i in range(0,len(self.labelsInfo)):
+			patient = self.labelsInfo[i]
+			if patient[kPatientID] == patientID:
+				imageData = self.loadImageForPatientId(patient,False)
+				np.copyto(input[idx], imageData)
+			
+				if patient[kTarget] == "1":
+					xmin = float(patient[kBoundsX])
+					ymin = float(patient[kBoundsY])
+					xmax = xmin + float(patient[kBoundsWidth])
+					ymax = ymin + float(patient[kBoundsHeight])
+				
+					# Note: the canvas the bounds are in is 1024x1024
+					xdelta = (1024 / IMG_SUBDIVIDE)
+					ydelta = (1024 / IMG_SUBDIVIDE)
+					for x in range(0, IMG_SUBDIVIDE):
+						for y in range(0, IMG_SUBDIVIDE):
+							xValue = x * xdelta
+							yValue = y * ydelta
+							if xValue+xdelta >= xmin and xValue <= xmax:
+								output[idx][x] = 1
+							if yValue+ydelta >= ymin and yValue <= ymax:
+								output[idx][IMG_SUBDIVIDE+y] = 1
+				
+				idx += 1
+							
+		return input,output
+	
 	def generatePredictionImages(self):
 		
 		fileList = []

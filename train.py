@@ -78,11 +78,15 @@ def Train(generator,_model,n,epocs):
 	train,label = generator.generateImages(0)
 	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,validation_split=0.2,verbose=1)
 
-def Test():
+def Test(filename):
 	_model = model.createModel(True)
 	
 	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
-	input,output = generator.generateImages(64)
+	
+	if filename is None:
+		input,output = generator.generateImages(64)
+	else:
+		input,output = generator.generateImagesForPatient(filename)
 	
 	results = _model.predict(input)
 	
@@ -116,12 +120,22 @@ def GenerateSubmission():
 			outputFile.write("%s,%f %d %d %d %d\n" % (fileList[i],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
 		else:
 			outputFile.write("%s,\n" % fileList[i])
-		
+
+
+# TODO:
+# 0100515c-5204-4f31-98e0-f35e4b00004a is a false negative
+# 00436515-870c-4b36-a041-de91049b9ab4 example of not identifying separate peaks
+
+
+
 
 if __name__ == '__main__':
-	if sys.argv >= 2:
+	if len(sys.argv) >= 2:
 		if sys.argv[1] == "test":
-			Test()
+			if len(sys.argv) >= 3:
+				Test(sys.argv[2])
+			else:
+				Test(None)
 		elif sys.argv[1] == "learn":
 			Learn()
 		elif sys.argv[1] == "preprocess":
