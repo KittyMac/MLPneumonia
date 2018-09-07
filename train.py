@@ -20,6 +20,8 @@ import signal
 import time
 import coremltools
 
+from model import IMG_SIZE
+
 from PIL import Image,ImageDraw
 
 ######
@@ -51,9 +53,9 @@ def Learn():
 	print("initializing the generator")
 	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
 	
-	iterations = 100000
+	iterations = 10
 		
-	print("beginning training")
+	print("beginning training")	
 	handler = SignalHandler()
 	i = 0
 	while True:
@@ -61,32 +63,60 @@ def Learn():
 		if handler.stop_processing:
 			break
 		
-		n = 10000
+		n = 1
 		print(i)
-		Train(generator,_model,n)
+		Train(generator,_model,n,20)
 		i += n
 		
 		if i >= iterations:
 			break
-				
 	
 	_model.save(model.MODEL_H5_NAME)
 
 
-def Train(generator,_model,n):
-	
-	train,label = generator.generateImages(n)
-	
-	batch_size = 32
-	if n < batch_size:
-		batch_size = n
-	
-	_model.fit(train,label,batch_size=batch_size,shuffle=True,epochs=1,verbose=1)
+def Train(generator,_model,n,epocs):
+	train,label = generator.generateImages(0)
+	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,validation_split=0.2,verbose=1)
 
 def Test():
 	_model = model.createModel(True)
-	print("test not implemented yet")		
 	
+	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
+	input,output = generator.generateImages(64)
+	
+	results = _model.predict(input)
+	
+	
+	for i in range(0,len(output)):
+		sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
+		
+		draw = ImageDraw.Draw(sourceImg)
+		draw.rectangle(generator.coordinatesFromOutput(output[i],IMG_SIZE), outline="green")
+		draw.rectangle(generator.coordinatesFromOutput(results[i],IMG_SIZE), outline="red")
+				
+		sourceImg.save('/tmp/prediction_%d_t%s_p%s.png' % (i, generator.convertOutputToString(output[i]), generator.convertOutputToString(results[i])))
+
+def GenerateSubmission():
+	_model = model.createModel(True)
+	
+	print("loading submission images")
+	generator = data.DCMGenerator("data/stage_1_test_images", None)
+	fileList,input = generator.generatePredictionImages()
+	
+	print("predicting pnemonia")
+	results = _model.predict(input)
+	
+	print("writing results file")
+	outputFile = open("submission.csv", "w")
+	for i in range(0,len(fileList)):
+		print("  ... %s" % fileList[i])
+		bounds = generator.coordinatesFromOutput(results[i],IMG_SIZE)
+		confidence = np.max(results[i])
+		if confidence >= 0.5:
+			outputFile.write("%s,%f %d %d %d %d\n" % (fileList[i],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
+		else:
+			outputFile.write("%s,\n" % fileList[i])
+		
 
 if __name__ == '__main__':
 	if sys.argv >= 2:
@@ -96,6 +126,8 @@ if __name__ == '__main__':
 			Learn()
 		elif sys.argv[1] == "preprocess":
 			Preprocess()
+		elif sys.argv[1] == "submit":
+			GenerateSubmission()
 	else:
 		Test()
 	
