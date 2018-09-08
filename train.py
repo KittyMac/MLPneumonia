@@ -97,8 +97,14 @@ def Test(filename):
 		sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
 		
 		draw = ImageDraw.Draw(sourceImg)
-		draw.rectangle(generator.coordinatesFromOutput(output[i],IMG_SIZE), outline="green")
-		draw.rectangle(generator.coordinatesFromOutput(results[i],IMG_SIZE), outline="red")
+		
+		boxes = generator.coordinatesFromOutput(output[i],IMG_SIZE)
+		for box in boxes:
+			draw.rectangle(box, outline="green")
+			
+		boxes = generator.coordinatesFromOutput(results[i],IMG_SIZE)
+		for box in boxes:
+			draw.rectangle(box, outline="red")
 		
 		sourceImg.save('/tmp/prediction_%s_t%s_p%s.png' % (patientIds[i], generator.convertOutputToString(output[i]), generator.convertOutputToString(results[i])))
 
@@ -119,10 +125,13 @@ def GenerateSubmission():
 		print("  ... %s" % patients[i][0])
 		
 		# Note: for the submission, all bounds must be reckoned in 1024x1024, the size of the samples provided
-		bounds = generator.coordinatesFromOutput(results[i],(1024,1024))
+		boxes = generator.coordinatesFromOutput(results[i],(1024,1024))
 		confidence = generator.convertOutputToString(results[i])
 		if confidence >= 0.5:
-			outputFile.write("%s,%f %d %d %d %d\n" % (patients[i][0],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
+			outputFile.write("%s," % (patients[i][0]))
+			for box in boxes:
+				outputFile.write("%f %d %d %d %d " % (confidence,box[0],box[1],box[2]-box[0],box[3]-box[1]))
+			outputFile.write("\n")
 		else:
 			outputFile.write("%s,\n" % patients[i][0])
 

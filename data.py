@@ -21,7 +21,7 @@ kBoundsHeight = 4
 kTarget = 5
 
 kMaxImageOffset = 10
-
+	
 class DCMGenerator():
 	
 	def __init__(self,directory,labelsFile):
@@ -208,33 +208,96 @@ class DCMGenerator():
 					return 1
 		return 0
 	
-	def coordinatesFromOutput(self,output,size):
-		IMG_SUBDIVIDE = int(len(output)/2)
-		
+	
+	def identifyPeaksForAxis(self,output):
+		IMG_SUBDIVIDE = int(len(output))
 		xdelta = 1.0 / IMG_SUBDIVIDE
 		ydelta = 1.0 / IMG_SUBDIVIDE
-	
-		xmin = 1.0
-		xmax = 0.0
-		ymin = 1.0
-		ymax = 0.0
-	
-		for x in range(0,IMG_SUBDIVIDE):
-			for y in range(0,IMG_SUBDIVIDE):
-				xValue = (x*xdelta)
-				yValue = (y*ydelta)
-				
-				if output[x] >= 0.5 and output[IMG_SUBDIVIDE+y] >= 0.5:
-					if xValue < xmin:
-						xmin = xValue
-					if xValue > xmax:
-						xmax = xValue
-					if yValue < ymin:
-						ymin = yValue
-					if yValue > ymax:
-						ymax = yValue
 		
-		return (xmin*size[1],ymin*size[0],xmax*size[1],ymax*size[0])
+		peak_indentity = np.zeros((IMG_SUBDIVIDE), dtype='float32')
+		minPeakSize = 3
+		
+		peakIdx = 0
+		x = 0
+		while x < IMG_SUBDIVIDE:
+			xValue = (x*xdelta)
+			
+			# step forward until we find the first peak
+			if output[x] >= 0.5:
+				# ensure this peak is large enough (ignore little peaks)
+				isPeak = False
+				for x2 in range(x,IMG_SUBDIVIDE):
+					if output[x2] < 0.5:
+						if x2 - x > minPeakSize:
+							isPeak = True
+				
+				# peak identified, fill it out
+				if isPeak:
+					peakIdx += 1
+					for x2 in range(x,IMG_SUBDIVIDE):
+						if output[x2] >= 0.5:
+							peak_indentity[x2] = peakIdx
+						else:
+							break
+					x = x2
+			x += 1
+		return peak_indentity,peakIdx
+	
+	def coordinatesFromOutput(self,output,size):
+		# 1. run through X and Y outputs and identify peaks (0 for not in peak, increasing numeral of different peak)
+		# 2. run through X and Y output values, and identify new bounds based on peak index
+		IMG_SUBDIVIDE = int(len(output)/2)
+		xdelta = 1.0 / IMG_SUBDIVIDE
+		ydelta = 1.0 / IMG_SUBDIVIDE
+		
+		x_output = output[0:IMG_SUBDIVIDE]
+		y_output = output[IMG_SUBDIVIDE:]
+		
+		x_peaks,num_x_peaks = self.identifyPeaksForAxis(x_output)
+		y_peaks,num_y_peaks = self.identifyPeaksForAxis(y_output)
+		
+		'''
+		print("x axis")
+		print(x_output)
+		print(x_peaks)
+		print("-----------------------")
+		print("y axis")
+		print(y_output)
+		print(y_peaks)
+		print("-----------------------")
+		'''
+		
+		boxes = []
+		
+		for peakIdx in range(1,num_x_peaks+1):
+		
+			xmin = 1.0
+			xmax = 0.0
+			ymin = 1.0
+			ymax = 0.0
+	
+			for x in range(0,IMG_SUBDIVIDE):
+				for y in range(0,IMG_SUBDIVIDE):
+					xValue = (x*xdelta)
+					yValue = (y*ydelta)
+					
+					if x_peaks[x] == peakIdx:
+						if output[x] >= 0.5 and output[IMG_SUBDIVIDE+y] >= 0.5:
+							if xValue < xmin:
+								xmin = xValue
+							if xValue > xmax:
+								xmax = xValue
+							if yValue < ymin:
+								ymin = yValue
+							if yValue > ymax:
+								ymax = yValue
+			
+			#only boxes with decent width or height are counted
+			box = (int(xmin*size[1]),int(ymin*size[0]),int(xmax*size[1]),int(ymax*size[0]))
+			if box[2] - box[0] > 10 and box[3] - box[1] > 10:
+				boxes.append(box)
+				
+		return boxes
 	
 			
 
@@ -251,7 +314,10 @@ if __name__ == '__main__':
 		sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
 		
 		draw = ImageDraw.Draw(sourceImg)
-		draw.rectangle(generator.coordinatesFromOutput(output[i],IMG_SIZE), outline="white")
+		
+		boxes = generator.coordinatesFromOutput(output[i],IMG_SIZE)
+		for box in boxes:
+			draw.rectangle(box, outline="white")
 		
 		sourceImg.save('/tmp/scan_%d_%s.png' % (i, generator.convertOutputToString(output[i])))
 	
