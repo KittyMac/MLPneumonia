@@ -20,7 +20,7 @@ kBoundsWidth = 3
 kBoundsHeight = 4
 kTarget = 5
 
-kMaxImageOffset = 30
+kMaxImageOffset = 10
 
 class DCMGenerator():
 	
@@ -95,7 +95,7 @@ class DCMGenerator():
 			randomSelection = False
 		
 		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
-		output = np.zeros((num,1+IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
+		output = np.zeros((num,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
 		
 		random.shuffle(localLabelsInfo)
 		
@@ -107,7 +107,8 @@ class DCMGenerator():
 		for i in range(0,num):
 			
 			if randomSelection:
-				while True:
+				attempts = 10000
+				while attempts > 0:
 					patient = random.choice(localLabelsInfo)
 					
 					if numPositive <= (numNegative+numPositive)*positiveSplit and patient[kTarget] == "1":
@@ -116,33 +117,63 @@ class DCMGenerator():
 					if numPositive > (numNegative+numPositive)*positiveSplit and patient[kTarget] == "0":
 						numNegative += 1
 						break
+					
+					attempts -= 1
 			else:
 				patient = localLabelsInfo[i]
 			
-			localLabelsInfo.remove(patient)
+			if num < len(localLabelsInfo):
+				localLabelsInfo.remove(patient)
 			
 			patientIds.append(patient[kPatientID])
 			
-			xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
-			yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+			input2,output2 = self.generateImagesForPatient(patient[kPatientID],augment)
 			
-			if augment == False:
-				xOffForImage = 0
-				yOffForImage = 0
-			
-			imageData = self.loadImageForPatientId(patient)
-			imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
-			np.copyto(input[i], imageData)
+			np.copyto(input[i],input2[0])
+			np.copyto(output[i],output2[0])
+		
+		if randomSelection:
+			print(numPositive, numNegative)
+							
+		return input,output,patientIds
+	
+	def generateImagesForPatient(self,patientID,augment=True):
+		
+		localPatientInfo = []
+		for i in range(0,len(self.labelsInfo)):
+			patient = self.labelsInfo[i]
+			if patient[kPatientID] == patientID:
+				localPatientInfo.append(patient)
 
-			if patient[kTarget] == "1":
+		
+		input = np.zeros((1,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
+		output = np.zeros((1,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
+		
+		localPatient = localPatientInfo[0]
+		
+		xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+		yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+		
+		if augment == False:
+			xOffForImage = 0
+			yOffForImage = 0
+						
+		imageData = self.loadImageForPatientId(localPatient)
+		imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
+		np.copyto(input[0], imageData)
+	
+		if localPatient[kTarget] == "1":
+			# note: we may have multiple data lines per patient, so we want to
+			# combine their outputs such that there is only one combined training sample
+			for patient in localPatientInfo:
 				xOffForBounds = xOffForImage * (1024 / IMG_SIZE[0])
 				yOffForBounds = yOffForImage * (1024 / IMG_SIZE[1])
-								
+			
 				xmin = float(patient[kBoundsX]) + xOffForBounds
 				ymin = float(patient[kBoundsY]) + yOffForBounds
 				xmax = xmin + float(patient[kBoundsWidth])
 				ymax = ymin + float(patient[kBoundsHeight])
-				
+		
 				# Note: the canvas the bounds are in is 1024x1024
 				xdelta = (1024 / IMG_SUBDIVIDE)
 				ydelta = (1024 / IMG_SUBDIVIDE)
@@ -151,69 +182,10 @@ class DCMGenerator():
 						xValue = x * xdelta
 						yValue = y * ydelta
 						if xValue+xdelta >= xmin and xValue <= xmax:
-							output[i][x] = 1
+							output[0][x] = 1
 						if yValue+ydelta >= ymin and yValue <= ymax:
-							output[i][IMG_SUBDIVIDE+y] = 1
-			else:
-				output[i][IMG_SUBDIVIDE+IMG_SUBDIVIDE] = 1
-		
-		if randomSelection:
-			print(numPositive, numNegative)
-							
-		return input,output,patientIds
-	
-	def generateImagesForPatient(self,patientID,augment=True):
+							output[0][IMG_SUBDIVIDE+y] = 1
 				
-		num = 0
-		for i in range(0,len(self.labelsInfo)):
-			patient = self.labelsInfo[i]
-			if patient[kPatientID] == patientID:
-				num += 1
-		
-		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
-		output = np.zeros((num,1+IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
-		
-		idx = 0
-		for i in range(0,len(self.labelsInfo)):
-			patient = self.labelsInfo[i]
-			if patient[kPatientID] == patientID:
-				
-				xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
-				yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
-				
-				if augment == False:
-					xOffForImage = 0
-					yOffForImage = 0
-								
-				imageData = self.loadImageForPatientId(patient)
-				imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
-				np.copyto(input[idx], imageData)
-			
-				if patient[kTarget] == "1":
-					xOffForBounds = xOffForImage * (1024 / IMG_SIZE[0])
-					yOffForBounds = yOffForImage * (1024 / IMG_SIZE[1])
-					
-					xmin = float(patient[kBoundsX]) + xOffForBounds
-					ymin = float(patient[kBoundsY]) + yOffForBounds
-					xmax = xmin + float(patient[kBoundsWidth])
-					ymax = ymin + float(patient[kBoundsHeight])
-				
-					# Note: the canvas the bounds are in is 1024x1024
-					xdelta = (1024 / IMG_SUBDIVIDE)
-					ydelta = (1024 / IMG_SUBDIVIDE)
-					for x in range(0, IMG_SUBDIVIDE):
-						for y in range(0, IMG_SUBDIVIDE):
-							xValue = x * xdelta
-							yValue = y * ydelta
-							if xValue+xdelta >= xmin and xValue <= xmax:
-								output[idx][x] = 1
-							if yValue+ydelta >= ymin and yValue <= ymax:
-								output[idx][IMG_SUBDIVIDE+y] = 1
-				else:
-					output[idx][IMG_SUBDIVIDE+IMG_SUBDIVIDE] = 1
-				
-				idx += 1
-							
 		return input,output
 	
 	def generatePredictionImages(self):
@@ -261,18 +233,7 @@ class DCMGenerator():
 						ymin = yValue
 					if yValue > ymax:
 						ymax = yValue
-				
-				#if output[x] >= 0.5:
-				#	if xValue < xmin:
-				#		xmin = xValue
-				#	if xValue > xmax:
-				#		xmax = xValue
-				#if output[IMG_SUBDIVIDE+y] >= 0.5:
-				#	if yValue < ymin:
-				#		ymin = yValue
-				#	if yValue > ymax:
-				#		ymax = yValue
-
+		
 		return (xmin*size[1],ymin*size[0],xmax*size[1],ymax*size[0])
 	
 			

@@ -10,8 +10,8 @@ from keras.optimizers import SGD
 import os
 
 MODEL_H5_NAME = "model.h5"
-IMG_SIZE = [320,320,1]
-IMG_SUBDIVIDE = 160
+IMG_SIZE = [160,160,1]
+IMG_SUBDIVIDE = 80
 
 
 def doesModelExist():
@@ -41,9 +41,9 @@ def createModel(loadFromDisk):
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	
 	model.add(Flatten())
-	model.add(Dense(512))
+	model.add(Dense(2048))
 	model.add(Activation('relu'))
-	model.add(Dense(1+IMG_SUBDIVIDE+IMG_SUBDIVIDE))
+	model.add(Dense(IMG_SUBDIVIDE+IMG_SUBDIVIDE))
 	model.add(Activation('sigmoid'))
 	
 	model.compile(loss='binary_crossentropy', optimizer="rmsprop", metrics=['accuracy'])

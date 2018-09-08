@@ -63,7 +63,7 @@ def Learn():
 		if handler.stop_processing:
 			break
 		
-		n = 6000
+		n = 12000
 		print(i)
 		Train(generator,_model,n,1)
 		i += n
@@ -75,8 +75,8 @@ def Learn():
 
 
 def Train(generator,_model,n,epocs):
-	train,label,patientIds = generator.generateImages(n,True,0.9)
-	_model.fit(train,label,batch_size=32,shuffle=True,epochs=epocs,verbose=1)
+	train,label,patientIds = generator.generateImages(n,True,0.85)
+	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1)
 
 def Test(filename):
 	_model = model.createModel(True)
@@ -120,6 +120,7 @@ def GenerateSubmission():
 		# Note: for the submission, all bounds must be reckoned in 1024x1024, the size of the samples provided
 		bounds = generator.coordinatesFromOutput(results[i],(1024,1024))
 		confidence = generator.convertOutputToString(results[i])
+		outputFile.write("patientId,PredictionString\n")
 		if confidence >= 0.5:
 			outputFile.write("%s,%f %d %d %d %d\n" % (patients[i][0],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
 		else:
