@@ -20,6 +20,8 @@ kBoundsWidth = 3
 kBoundsHeight = 4
 kTarget = 5
 
+kMaxImageOffset = 30
+
 class DCMGenerator():
 	
 	def __init__(self,directory,labelsFile):
@@ -42,9 +44,14 @@ class DCMGenerator():
 					self.labelsInfo.append(patient)
 					
 			
-				
+	def simpleImageAugment(self,imageData,xOff,yOff):
+		# very simple slide x/y image augmentation
+		imageData = np.roll(imageData, int(xOff), axis=1)
+		imageData = np.roll(imageData, int(yOff), axis=0)
+		return imageData
+		
 	
-	def loadImageForPatientId(self,patient,withBox=False):
+	def loadImageForPatientId(self,patient):
 		imageData = None
 		
 		patientId = patient[kPatientID]
@@ -64,11 +71,7 @@ class DCMGenerator():
 			# 3. reshape to greyscale
 			# 4. normalize
 			image = Image.fromarray(imageData).convert("RGB")
-			
-			if withBox and patient[kTarget] == "1":
-				draw = ImageDraw.Draw(image)
-				draw.rectangle(self.coordinatesFromPatient(patient), outline="white")		
-			
+						
 			image = image.resize((IMG_SIZE[0],IMG_SIZE[1]), Image.ANTIALIAS)
 			image = image.convert('L')
 			imageData = np.array(image).astype('float32').reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2]) / 255
@@ -82,29 +85,61 @@ class DCMGenerator():
 		return imageData
 		
 	
-	def generateImages(self,num,withBox=False):
+	def generateImages(self,num,augment,positiveSplit):
+		
+		localLabelsInfo = self.labelsInfo[:]
+		
 		randomSelection = True
 		if num <= 0:
-			num = len(self.labelsInfo)
+			num = len(localLabelsInfo)
 			randomSelection = False
 		
 		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
-		output = np.zeros((num,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
+		output = np.zeros((num,1+IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
 		
-		random.shuffle(self.labelsInfo)
+		random.shuffle(localLabelsInfo)
 		
 		patientIds = []
 		
+		numPositive = 0
+		numNegative = 0
+		
 		for i in range(0,num):
-			patient = random.choice(self.labelsInfo) if randomSelection else self.labelsInfo[i]
+			
+			if randomSelection:
+				while True:
+					patient = random.choice(localLabelsInfo)
+					
+					if numPositive <= (numNegative+numPositive)*positiveSplit and patient[kTarget] == "1":
+						numPositive += 1
+						break
+					if numPositive > (numNegative+numPositive)*positiveSplit and patient[kTarget] == "0":
+						numNegative += 1
+						break
+			else:
+				patient = localLabelsInfo[i]
+			
+			localLabelsInfo.remove(patient)
+			
 			patientIds.append(patient[kPatientID])
 			
-			imageData = self.loadImageForPatientId(patient,withBox)
+			xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+			yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+			
+			if augment == False:
+				xOffForImage = 0
+				yOffForImage = 0
+			
+			imageData = self.loadImageForPatientId(patient)
+			imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
 			np.copyto(input[i], imageData)
 
 			if patient[kTarget] == "1":
-				xmin = float(patient[kBoundsX])
-				ymin = float(patient[kBoundsY])
+				xOffForBounds = xOffForImage * (1024 / IMG_SIZE[0])
+				yOffForBounds = yOffForImage * (1024 / IMG_SIZE[1])
+								
+				xmin = float(patient[kBoundsX]) + xOffForBounds
+				ymin = float(patient[kBoundsY]) + yOffForBounds
 				xmax = xmin + float(patient[kBoundsWidth])
 				ymax = ymin + float(patient[kBoundsHeight])
 				
@@ -119,10 +154,15 @@ class DCMGenerator():
 							output[i][x] = 1
 						if yValue+ydelta >= ymin and yValue <= ymax:
 							output[i][IMG_SUBDIVIDE+y] = 1
+			else:
+				output[i][IMG_SUBDIVIDE+IMG_SUBDIVIDE] = 1
+		
+		if randomSelection:
+			print(numPositive, numNegative)
 							
 		return input,output,patientIds
 	
-	def generateImagesForPatient(self,patientID):
+	def generateImagesForPatient(self,patientID,augment=True):
 				
 		num = 0
 		for i in range(0,len(self.labelsInfo)):
@@ -131,18 +171,30 @@ class DCMGenerator():
 				num += 1
 		
 		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
-		output = np.zeros((num,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
+		output = np.zeros((num,1+IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
 		
 		idx = 0
 		for i in range(0,len(self.labelsInfo)):
 			patient = self.labelsInfo[i]
 			if patient[kPatientID] == patientID:
-				imageData = self.loadImageForPatientId(patient,False)
+				
+				xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+				yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+				
+				if augment == False:
+					xOffForImage = 0
+					yOffForImage = 0
+								
+				imageData = self.loadImageForPatientId(patient)
+				imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
 				np.copyto(input[idx], imageData)
 			
 				if patient[kTarget] == "1":
-					xmin = float(patient[kBoundsX])
-					ymin = float(patient[kBoundsY])
+					xOffForBounds = xOffForImage * (1024 / IMG_SIZE[0])
+					yOffForBounds = yOffForImage * (1024 / IMG_SIZE[1])
+					
+					xmin = float(patient[kBoundsX]) + xOffForBounds
+					ymin = float(patient[kBoundsY]) + yOffForBounds
 					xmax = xmin + float(patient[kBoundsWidth])
 					ymax = ymin + float(patient[kBoundsHeight])
 				
@@ -157,6 +209,8 @@ class DCMGenerator():
 								output[idx][x] = 1
 							if yValue+ydelta >= ymin and yValue <= ymax:
 								output[idx][IMG_SUBDIVIDE+y] = 1
+				else:
+					output[idx][IMG_SUBDIVIDE+IMG_SUBDIVIDE] = 1
 				
 				idx += 1
 							
@@ -170,7 +224,7 @@ class DCMGenerator():
 				
 		for i in range(0,num):
 			patient = self.labelsInfo[i]
-			imageData = self.loadImageForPatientId(patient,False)
+			imageData = self.loadImageForPatientId(patient)
 			np.copyto(input[i], imageData)
 										
 		return self.labelsInfo,input
@@ -181,13 +235,6 @@ class DCMGenerator():
 				if output[x] >= 0.5 and output[IMG_SUBDIVIDE+y] >= 0.5:
 					return 1
 		return 0
-	
-	def coordinatesFromPatient(self,patient):
-		x = float(patient[kBoundsX])
-		y = float(patient[kBoundsY])
-		w = float(patient[kBoundsWidth])
-		h = float(patient[kBoundsHeight])
-		return ((x,y),(x+w,y+h))
 	
 	def coordinatesFromOutput(self,output,size):
 		IMG_SUBDIVIDE = int(len(output)/2)
@@ -236,9 +283,10 @@ if __name__ == '__main__':
 	generator = DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")	
 	generator.ignoreCaches = True
 	
-	input,output,patientIds = generator.generateImages(20, True)
+	input,output,patientIds = generator.generateImages(2,True,0.5)
 	
 	for i in range(0,len(input)):
+				
 		sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
 		
 		draw = ImageDraw.Draw(sourceImg)

@@ -10,8 +10,8 @@ from keras.optimizers import SGD
 import os
 
 MODEL_H5_NAME = "model.h5"
-IMG_SIZE = [256,256,1]
-IMG_SUBDIVIDE = 256
+IMG_SIZE = [320,320,1]
+IMG_SUBDIVIDE = 160
 
 
 def doesModelExist():
@@ -21,12 +21,7 @@ def createModel(loadFromDisk):
 
 	model = Sequential()
 
-	model.add(Conv2D(16, (3, 3), input_shape=(IMG_SIZE[1], IMG_SIZE[0], IMG_SIZE[2])))
-	model.add(Activation('relu'))
-	model.add(MaxPooling2D(pool_size=(2, 2)))
-	model.add(Dropout(0.1))
-	
-	model.add(Conv2D(32, (3, 3)))
+	model.add(Conv2D(32, (5, 5), input_shape=(IMG_SIZE[1], IMG_SIZE[0], IMG_SIZE[2])))
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
@@ -41,10 +36,14 @@ def createModel(loadFromDisk):
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
 	
+	model.add(Conv2D(256, (3, 3)))
+	model.add(Activation('relu'))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
+	
 	model.add(Flatten())
 	model.add(Dense(512))
 	model.add(Activation('relu'))
-	model.add(Dense(IMG_SUBDIVIDE+IMG_SUBDIVIDE))
+	model.add(Dense(1+IMG_SUBDIVIDE+IMG_SUBDIVIDE))
 	model.add(Activation('sigmoid'))
 	
 	model.compile(loss='binary_crossentropy', optimizer="rmsprop", metrics=['accuracy'])

@@ -41,7 +41,7 @@ def Preprocess():
 	# force all of the images to get cached
 	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")	
 	generator.ignoreCaches = True
-	input,output,patientIds = generator.generateImages(0)
+	input,output,patientIds = generator.generateImages(0,False,0.5)
 
 def Learn():
 		
@@ -63,9 +63,9 @@ def Learn():
 		if handler.stop_processing:
 			break
 		
-		n = 10000
+		n = 6000
 		print(i)
-		Train(generator,_model,n,4)
+		Train(generator,_model,n,1)
 		i += n
 		
 		if i >= iterations:
@@ -75,8 +75,8 @@ def Learn():
 
 
 def Train(generator,_model,n,epocs):
-	train,label,patientIds = generator.generateImages(n)
-	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,validation_split=0.2,verbose=1)
+	train,label,patientIds = generator.generateImages(n,True,0.9)
+	_model.fit(train,label,batch_size=32,shuffle=True,epochs=epocs,verbose=1)
 
 def Test(filename):
 	_model = model.createModel(True)
@@ -85,7 +85,7 @@ def Test(filename):
 	#generator = data.DCMGenerator("data/stage_1_test_images", None)
 	
 	if filename is None:
-		input,output,patientIds = generator.generateImages(64)
+		input,output,patientIds = generator.generateImages(64,False,0.5)
 	else:
 		input,output = generator.generateImagesForPatient(filename)
 		patientIds = [filename,filename,filename]
@@ -116,7 +116,9 @@ def GenerateSubmission():
 	outputFile = open("submission.csv", "w")
 	for i in range(0,len(patients)):
 		print("  ... %s" % patients[i][0])
-		bounds = generator.coordinatesFromOutput(results[i],IMG_SIZE)
+		
+		# Note: for the submission, all bounds must be reckoned in 1024x1024, the size of the samples provided
+		bounds = generator.coordinatesFromOutput(results[i],(1024,1024))
 		confidence = generator.convertOutputToString(results[i])
 		if confidence >= 0.5:
 			outputFile.write("%s,%f %d %d %d %d\n" % (patients[i][0],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
