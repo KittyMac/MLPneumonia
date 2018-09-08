@@ -114,13 +114,13 @@ def GenerateSubmission():
 	
 	print("writing results file")
 	outputFile = open("submission.csv", "w")
+	outputFile.write("patientId,PredictionString\n")
 	for i in range(0,len(patients)):
 		print("  ... %s" % patients[i][0])
 		
 		# Note: for the submission, all bounds must be reckoned in 1024x1024, the size of the samples provided
 		bounds = generator.coordinatesFromOutput(results[i],(1024,1024))
 		confidence = generator.convertOutputToString(results[i])
-		outputFile.write("patientId,PredictionString\n")
 		if confidence >= 0.5:
 			outputFile.write("%s,%f %d %d %d %d\n" % (patients[i][0],confidence,bounds[0],bounds[1],bounds[2]-bounds[0],bounds[3]-bounds[1]))
 		else:
