@@ -1,8 +1,9 @@
 from __future__ import division
 
-# Note: we're trying out PlaidML
 import os
-os.environ["KERAS_BACKEND"] = "plaidml.keras.backend"
+
+# Note: we're trying out PlaidML
+#os.environ["KERAS_BACKEND"] = "plaidml.keras.backend"
 
 import csv
 import pydicom
@@ -12,6 +13,7 @@ import random
 import os.path
 from model import IMG_SIZE
 from PIL import Image,ImageDraw
+import cv2
 
 kPatientID = 0
 kBoundsX = 1
@@ -20,33 +22,47 @@ kBoundsWidth = 3
 kBoundsHeight = 4
 kTarget = 5
 
+exportCount = 0
+
 def dcmFilePathForPatient(patient):
 	return "data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
 
 def npyFilePathForPatient(patient, hasPneumonia):
-	return "train/%d.%s.npy" % (hasPneumonia,patient[kPatientID])
+	global exportCount
+	exportCount += 1
+	return "train/%d.%s.%d.npy" % (hasPneumonia,patient[kPatientID],exportCount)
 
 def saveExtractedImageFromPatient(dcmFilePath,patient,hasPneumonia):
 	# - load the DCM of the patient
 	dcmData = pydicom.read_file(dcmFilePath)
-	image = Image.fromarray(dcmData.pixel_array).convert("L")
+	imageData = dcmData.pixel_array.astype('float32') / 255
 				
 	# - extract the bounded area
-	left = float(patient[kBoundsX])
-	top = float(patient[kBoundsY])
-	right = left + float(patient[kBoundsWidth])
-	bottom = top + float(patient[kBoundsHeight])
-	
-	image = image.crop((left,top,right,bottom))
+	xmin = float(patient[kBoundsX])
+	ymin = float(patient[kBoundsY])
+	xmax = xmin + float(patient[kBoundsWidth])
+	ymax = ymin + float(patient[kBoundsHeight])
+		
+	croppedImage = imageData[int(ymin):int(ymax),int(xmin):int(xmax)]
 	
 	# - resize to the model training size
-	image = image.resize((IMG_SIZE[0],IMG_SIZE[1]), Image.ANTIALIAS)
-	imageData = np.array(image).astype('float32').reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2]) / 255
+	outputImage = cv2.resize(croppedImage, (IMG_SIZE[0],IMG_SIZE[1])).reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2])
 	
 	# - save the training sample to disk, using filename to specify it has pneumonia
 	outputPath = npyFilePathForPatient(patient, hasPneumonia)
 	print("caching image: %s" % outputPath)
-	np.save(outputPath, imageData)
+	np.save(outputPath, outputImage)
+	
+	'''
+	if random.random() < 0.1:
+		# CONFIRM THIS IS WORKING RIGHT!!!
+		Image.fromarray((outputImage * 255).reshape(IMG_SIZE[0],IMG_SIZE[1])).show()
+		sourceImg = Image.fromarray(dcmData.pixel_array).convert("RGB")
+		draw = ImageDraw.Draw(sourceImg)
+		draw.rectangle((xmin,ymin,xmax,ymax), outline="green")
+		sourceImg.show()
+		exit(1)
+	'''
 
 if __name__ == '__main__':
 	

@@ -1,8 +1,9 @@
 from __future__ import division
 
-# Note: we're trying out PlaidML
 import os
-os.environ["KERAS_BACKEND"] = "plaidml.keras.backend"
+
+# Note: we're trying out PlaidML
+#os.environ["KERAS_BACKEND"] = "plaidml.keras.backend"
 
 from keras import backend as keras
 
@@ -44,20 +45,39 @@ def Learn():
 	input = np.zeros((num,IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2]), dtype='float32')
 	output = np.zeros((num,2), dtype='float32')
 	
-	for i in range(0,num):
-		trainingFile = trainingFiles[i]
-		
-		np.copyto(input[i], np.load("train/%s" % (trainingFile[0])))
-		
+	class_weight = {
+		0:0,
+		1:0
+	}
+	for trainingFile in trainingFiles:
 		if trainingFile[1] == True:
-			output[i][1] = 1
+			class_weight[0] += 1
 		else:
-			output[i][0] = 1
-		
+			class_weight[1] += 1
 	
-	_model.fit(input,output,batch_size=128,shuffle=True,epochs=20,verbose=1)
+	class_weight[0] /= len(trainingFiles)
+	class_weight[1] /= len(trainingFiles)
 	
-	_model.save(model.MODEL_H5_NAME)
+	print("class_weight", class_weight)
+	
+	for n in range(0,100):
+		random.shuffle(trainingFiles)
+	
+		for i in range(0,num):
+			trainingFile = trainingFiles[i]
+			np.copyto(input[i], np.load("train/%s" % (trainingFile[0])))
+			if trainingFile[1] == True:
+				output[i][0] = 0
+				output[i][1] = 1
+			else:
+				output[i][0] = 1
+				output[i][1] = 0
+	
+		_model.fit(input,output,batch_size=128,shuffle=True,epochs=2,class_weight=class_weight,verbose=1)
+	
+		_model.save(model.MODEL_H5_NAME)
+		_model.save("../%s" % (model.MODEL_H5_NAME))
+	
 
 if __name__ == '__main__':
 	Learn()

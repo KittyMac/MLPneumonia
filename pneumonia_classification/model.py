@@ -20,7 +20,12 @@ def createModel(loadFromDisk):
 
 	model = Sequential()
 
-	model.add(Conv2D(32, (5, 5), input_shape=(IMG_SIZE[1], IMG_SIZE[0], IMG_SIZE[2])))
+	model.add(Conv2D(16, (5, 5), input_shape=(IMG_SIZE[1], IMG_SIZE[0], IMG_SIZE[2])))
+	model.add(Activation('relu'))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
+	model.add(Dropout(0.1))
+	
+	model.add(Conv2D(32, (3, 3)))
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
@@ -29,27 +34,23 @@ def createModel(loadFromDisk):
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
-	
-	model.add(Conv2D(128, (3, 3)))
-	model.add(Activation('relu'))
-	model.add(MaxPooling2D(pool_size=(2, 2)))
-	model.add(Dropout(0.1))
-	
-	model.add(Conv2D(256, (3, 3)))
-	model.add(Activation('relu'))
-	model.add(MaxPooling2D(pool_size=(2, 2)))
-	
+			
 	model.add(Flatten())
+	model.add(Dense(2048))
+	model.add(Activation('relu'))
+	model.add(Dense(1024))
+	model.add(Activation('relu'))
 	model.add(Dense(512))
 	model.add(Activation('relu'))
 	model.add(Dense(2))
 	model.add(Activation('softmax'))
 	
-	model.compile(loss='categorical_crossentropy', optimizer="rmsprop", metrics=['accuracy'])
+	model.compile(loss='categorical_crossentropy', optimizer="adadelta", metrics=['accuracy'])
 
 	print(model.summary())
 	
 	if loadFromDisk and os.path.isfile(MODEL_H5_NAME):
+		print("DID LOAD WEIGHTS")
 		model.load_weights(MODEL_H5_NAME)
 	
 	return model
