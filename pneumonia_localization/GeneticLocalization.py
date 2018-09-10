@@ -11,65 +11,37 @@ class Organism:
 	def __init__(self,width,height):
 		self.width = width
 		self.height = height
-		self.xmin = 0
-		self.xmax = width
-		self.ymin = 0
-		self.ymax = height
-		
-		self.minSize = 20
+		self.x = width / 2
+		self.y = height / 2
+		self.gridSize = 120
 	
 	def __str__(self):
-		return "(%d,%d,%d,%d)" % (self.xmin, self.ymin, self.xmax, self.ymax)
+		return "(%d,%d,%d,%d)" % (self.x, self.y, self.x+self.gridSize, self.y+self.gridSize)
 	def __repr__(self):
-		return "(%d,%d,%d,%d)" % (self.xmin, self.ymin, self.xmax, self.ymax)
+		return "(%d,%d,%d,%d)" % (self.x, self.y, self.x+self.gridSize, self.y+self.gridSize)
 	
 	def randomize(self,index,prng):
 		if index == 0:
-			self.xmin = prng.randint(0,self.xmax-self.minSize)
-		elif index == 1:
-			self.ymin = prng.randint(0,self.ymax-self.minSize)
-		elif index == 2:
-			self.xmax = prng.randint(self.xmin+self.minSize,self.width)
+			self.x = prng.randint(0,self.width-self.gridSize)
 		else:
-			self.ymax = prng.randint(self.ymin+self.minSize,self.height)
+			self.y = prng.randint(0,self.height-self.gridSize)
 	
 	def randomizeOne(self,prng):
 		self.randomize(prng.randint(0,3), prng)
 		
 	def randomizeAll(self,prng):
-		self.xmin = prng.randint(0,self.xmax-self.minSize)
-		self.ymin = prng.randint(0,self.ymax-self.minSize)
-		self.xmax = prng.randint(self.xmin+self.minSize,self.width)
-		self.ymax = prng.randint(self.ymin+self.minSize,self.height)
-	
-	def validate(self):
-		# some basic rules can help us avoid weird stuff
-		# 0. max must be > min
-		if self.xmax < self.xmin:
-			t = self.xmin
-			self.xmin = self.xmax
-			self.xmax = t
-		if self.ymax < self.ymin:
-			t = self.ymin
-			self.ymin = self.ymax
-			self.ymax = t
-		# 1. must be at least 1 width or 1 height
-		if self.xmax - self.xmin < 1:
-			self.xmin = self.xmax - 1
-		if self.ymax - self.ymin < 1:
-			self.ymin = self.ymax - 1
-	
+		self.x = prng.randint(0,self.width-self.gridSize)
+		self.y = prng.randint(0,self.height-self.gridSize)
+		
 	def copyFrom(self,other):
-		self.xmin = other.xmin
-		self.xmax = other.xmax
-		self.ymin = other.ymin
-		self.ymax = other.ymax
+		self.x = other.x
+		self.y = other.y
 	
 	def box(self):
-		return (int(self.xmin),int(self.ymin),int(self.xmax),int(self.ymax))
+		return (int(self.x),int(self.y),int(self.x+self.gridSize),int(self.y+self.gridSize))
 	
 	def crop(self,npImage):
-		return npImage[int(self.ymin):int(self.ymax),int(self.xmin):int(self.xmax)]
+		return npImage[int(self.y):int(self.y+self.gridSize),int(self.x):int(self.x+self.gridSize)]
 		
 
 class GeneticLocalization:
@@ -78,10 +50,11 @@ class GeneticLocalization:
 	# opencv getPerspectiveTransform converts the crop to image sized for predicting against the model
 	# the prediction against the model is used at the fitness score for the genetic algorithm
 
-	def __init__(self,npImage,cnnModel,cnnModelImageSize):
+	def __init__(self,npImage,cnnModel,ignoreBoxes,cnnModelImageSize):
 		self.npImage = npImage
 		self.cnnModel = cnnModel
 		self.cnnModelImageSize = cnnModelImageSize
+		self.ignoreBoxes = ignoreBoxes
 		
 		self.ga = GeneticAlgorithm()
 		self.ga.numberOfOrganisms = 512
@@ -89,7 +62,6 @@ class GeneticLocalization:
 		def generateOrganism (idx,prng):
 			o = Organism (1024,1024)
 			o.randomizeAll (prng)
-			o.validate ()
 			return o
 		self.ga.generateOrganism = generateOrganism
 		
@@ -98,19 +70,22 @@ class GeneticLocalization:
 				child.copyFrom(organismA)
 				child.randomizeOne(prng)
 			else:
-				child.xmin = organismA.xmin if prng.random() > 0.5 else organismB.xmin
-				child.xmax = organismA.xmax if prng.random() > 0.5 else organismB.xmax
-				child.ymin = organismA.ymin if prng.random() > 0.5 else organismB.ymin
-				child.ymax = organismA.ymax if prng.random() > 0.5 else organismB.ymax
+				child.x = organismA.x if prng.random() > 0.5 else organismB.x
+				child.y = organismA.y if prng.random() > 0.5 else organismB.y
 
 				if prng.random() > 0.5:
 					child.randomizeOne(prng)
 				elif prng.random() > 0.5:
 					child.randomizeAll(prng)
-			child.validate()
 		self.ga.breedOrganisms = breedOrganisms
 		
 		def scoreOrganism (organism, idx, prng):
+			# if we overlap any ignore boxes by a significant portion we should score low...
+			organismBox = organism.box()
+			for box in self.ignoreBoxes:
+				if self.calculateIntersectionOverUnion(box, organismBox) > 0.2:
+					return 0.0
+			
 			cropped = organism.crop(self.npImage)
 			input = cv2.resize(cropped, self.cnnModelImageSize)
 			output = self.cnnModel.predict(input.reshape(1,self.cnnModelImageSize[0],self.cnnModelImageSize[1], 1))
@@ -122,11 +97,34 @@ class GeneticLocalization:
 				return True
 			return False
 		self.ga.chosenOrganism = chosenOrganism
-		
+	
+	def calculateIntersectionOverUnion(self, boxA, boxB):
+		# determine the (x, y)-coordinates of the intersection rectangle
+		xA = max(boxA[0], boxB[0])
+		yA = max(boxA[1], boxB[1])
+		xB = min(boxA[2], boxB[2])
+		yB = min(boxA[3], boxB[3])
+ 
+		# compute the area of intersection rectangle
+		interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+ 
+		# compute the area of both the prediction and ground-truth
+		# rectangles
+		boxAArea = (boxA[2] - boxA[0] + 1) * (boxA[3] - boxA[1] + 1)
+		boxBArea = (boxB[2] - boxB[0] + 1) * (boxB[3] - boxB[1] + 1)
+ 
+		# compute the intersection over union by taking the intersection
+		# area and dividing it by the sum of prediction + ground-truth
+		# areas - the interesection area
+		iou = interArea / float(boxAArea + boxBArea - interArea)
+ 
+		# return the intersection over union value
+		return iou
+	
 
 	def findBox(self):
 		bestOrgansim, bestScore = self.ga.PerformGenetics(60000)
-		if bestScore >= 0.5:
+		if bestScore >= 0.99:
 			print("bestScore", bestScore, bestOrgansim.box())
 			return bestOrgansim.box()
 		return None

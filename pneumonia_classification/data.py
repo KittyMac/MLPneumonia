@@ -24,6 +24,8 @@ kTarget = 5
 
 exportCount = 0
 
+gridSize = 120
+
 def adjustImageLevels(imageData):
 	return np.clip(imageData * 2.0 - 0.5, 0.0, 1.0)
 
@@ -40,8 +42,9 @@ def saveExtractedImageFromPatient(dcmFilePath,patient,hasPneumonia):
 	dcmData = pydicom.read_file(dcmFilePath)
 	imageData = dcmData.pixel_array.astype('float32') / 255
 	imageData = adjustImageLevels(imageData)
-				
-	# - extract the bounded area
+	
+	
+	# - Define the area we should pull from
 	xmin = float(patient[kBoundsX])
 	ymin = float(patient[kBoundsY])
 	xmax = xmin + float(patient[kBoundsWidth])
@@ -49,32 +52,45 @@ def saveExtractedImageFromPatient(dcmFilePath,patient,hasPneumonia):
 	
 	if hasPneumonia > 1:
 		hasPneumonia = 0
-		xmin = random.randint(0,924)
-		ymin = random.randint(0,924)
-		xmax = random.randint(xmin+1,1024)
-		ymax = random.randint(ymin+1,1024)
+		xmin = 0
+		ymin = 0
+		xmax = 1024
+		ymax = 1024
 	
+	
+	for i in range(0,5):
+		if xmin > xmax-gridSize:
+			x = xmin
+		else:
+			x = random.randint(xmin,xmax-gridSize)
 		
-	croppedImage = imageData[int(ymin):int(ymax),int(xmin):int(xmax)]
+		if ymin > ymax-gridSize:
+			y = ymin
+		else:
+			y = random.randint(ymin,ymax-gridSize)
+		
+		
+		croppedImage = imageData[int(y):int(y+gridSize),int(x):int(x+gridSize)]
 	
-	# - resize to the model training size
-	outputImage = cv2.resize(croppedImage, (IMG_SIZE[0],IMG_SIZE[1])).reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2])
+		# - resize to the model training size
+		outputImage = cv2.resize(croppedImage, (IMG_SIZE[0],IMG_SIZE[1])).reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2])
 	
-	# - save the training sample to disk, using filename to specify it has pneumonia
-	outputPath = npyFilePathForPatient(patient, hasPneumonia)
-	print("caching image: %s" % outputPath)
-	np.save(outputPath, outputImage)
+		# - save the training sample to disk, using filename to specify it has pneumonia
+		outputPath = npyFilePathForPatient(patient, hasPneumonia)
+		print("caching image: %s" % outputPath)
+		np.save(outputPath, outputImage)
+		
+		Image.fromarray((outputImage * 255).reshape(IMG_SIZE[0],IMG_SIZE[1])).convert("RGB").save("%s.png" % (outputPath))
 	
-	'''
-	if random.random() < 0.1:
+		'''
 		# CONFIRM THIS IS WORKING RIGHT!!!
 		Image.fromarray((outputImage * 255).reshape(IMG_SIZE[0],IMG_SIZE[1])).show()
 		sourceImg = Image.fromarray(dcmData.pixel_array).convert("RGB")
 		draw = ImageDraw.Draw(sourceImg)
 		draw.rectangle((xmin,ymin,xmax,ymax), outline="green")
 		sourceImg.show()
-		exit(1)
-	'''
+		'''
+	
 
 if __name__ == '__main__':
 	
@@ -123,5 +139,5 @@ if __name__ == '__main__':
 			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 5)
 			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 6)
 			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 7)
-	
+				
 	

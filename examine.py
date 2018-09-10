@@ -49,18 +49,13 @@ def Examine(dcmFilePath):
 	dcmImage = dcmData.pixel_array.astype('float32') / 255
 	dcmImage = adjustImageLevels(dcmImage)
 	
-	while len(boxes) < 4:
+	while len(boxes) < 40:
 		
-		gl = GeneticLocalization(dcmImage,cnnModel,(IMG_SIZE[0],IMG_SIZE[1]))
+		gl = GeneticLocalization(dcmImage,cnnModel,boxes,(IMG_SIZE[0],IMG_SIZE[1]))
 		box = gl.findBox()
 		if box is None:
 			break
 		boxes.append(box)
-		
-		# black out the area of the image containing the box
-		cv2.rectangle(dcmImage, (box[0],box[1]), (box[2],box[3]), (0,0,0), cv2.FILLED)
-		
-		Image.fromarray(dcmImage.reshape((1024,1024)) * 255).show()
 		
 	
 	print(boxes)
