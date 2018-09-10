@@ -19,6 +19,7 @@ from data import kBoundsY
 from data import kBoundsWidth
 from data import kBoundsHeight
 from data import kTarget
+from data import adjustImageLevels
 
 from GeneticLocalization import GeneticLocalization
 
@@ -46,12 +47,23 @@ def Examine(dcmFilePath):
 	
 	dcmData = pydicom.read_file(dcmFilePath)
 	dcmImage = dcmData.pixel_array.astype('float32') / 255
+	dcmImage = adjustImageLevels(dcmImage)
 	
-	gl = GeneticLocalization(dcmImage,cnnModel,(IMG_SIZE[0],IMG_SIZE[1]))
-	
-	box = gl.findBox()
-	if box is not None:
+	while len(boxes) < 4:
+		
+		gl = GeneticLocalization(dcmImage,cnnModel,(IMG_SIZE[0],IMG_SIZE[1]))
+		box = gl.findBox()
+		if box is None:
+			break
 		boxes.append(box)
+		
+		# black out the area of the image containing the box
+		cv2.rectangle(dcmImage, (box[0],box[1]), (box[2],box[3]), (0,0,0), cv2.FILLED)
+		
+		Image.fromarray(dcmImage.reshape((1024,1024)) * 255).show()
+		
+	
+	print(boxes)
 	
 	return boxes
 
@@ -129,6 +141,8 @@ def TestPatient(patientId):
 	dcmData = pydicom.read_file(dcmFilePath)
 	imageData = dcmData.pixel_array
 	imageDataNormalized = dcmData.pixel_array / 255
+	imageDataNormalized = adjustImageLevels(imageDataNormalized)
+	
 	sourceImg = Image.fromarray(imageData).convert("RGB")	
 	draw = ImageDraw.Draw(sourceImg)
 	
@@ -143,7 +157,9 @@ def TestPatient(patientId):
 	if interactiveMode == True:
 		# show the results
 		sourceImg.show()
-		
+	
+	
+	
 		''''
 		# ask if correct
 		if len(predictionBoxes) > 0:
@@ -154,7 +170,7 @@ def TestPatient(patientId):
 			
 				num = len(predictionBoxes) + len(predictionBoxes)
 				input = np.zeros((num,IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2]), dtype='float32')
-				output = np.zeros((num,2), dtype='float32')
+				output = np.zeros((num,1), dtype='float32')
 			
 				idx = 0
 				for box in predictionBoxes:
@@ -168,8 +184,7 @@ def TestPatient(patientId):
 					np.save(outputPath, outputData)
 				
 					np.copyto(input[idx],outputData)
-					output[idx][0] = 1
-					output[idx][1] = 0
+					output[idx][0] = 0
 					idx += 1
 				
 				for box in truthBoxes:
@@ -178,8 +193,7 @@ def TestPatient(patientId):
 					image = image.resize((IMG_SIZE[0],IMG_SIZE[1]), Image.ANTIALIAS)
 					outputData = np.array(image).astype('float32').reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2]) / 255
 					np.copyto(input[idx],outputData)
-					output[idx][0] = 0
-					output[idx][1] = 1
+					output[idx][0] = 1
 					idx += 1
 			
 				cnnModel.fit(input,output,batch_size=2,shuffle=True,epochs=1,verbose=1)

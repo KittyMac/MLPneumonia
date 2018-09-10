@@ -114,7 +114,7 @@ class GeneticLocalization:
 			cropped = organism.crop(self.npImage)
 			input = cv2.resize(cropped, self.cnnModelImageSize)
 			output = self.cnnModel.predict(input.reshape(1,self.cnnModelImageSize[0],self.cnnModelImageSize[1], 1))
-			return output[0][1]
+			return output[0][0]
 		self.ga.scoreOrganism = scoreOrganism
 		
 		def chosenOrganism(organism, score, generation, sharedOrganismIdx, prng):

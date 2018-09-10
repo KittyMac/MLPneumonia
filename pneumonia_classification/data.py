@@ -24,6 +24,9 @@ kTarget = 5
 
 exportCount = 0
 
+def adjustImageLevels(imageData):
+	return np.clip(imageData * 2.0 - 0.5, 0.0, 1.0)
+
 def dcmFilePathForPatient(patient):
 	return "data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
 
@@ -36,12 +39,21 @@ def saveExtractedImageFromPatient(dcmFilePath,patient,hasPneumonia):
 	# - load the DCM of the patient
 	dcmData = pydicom.read_file(dcmFilePath)
 	imageData = dcmData.pixel_array.astype('float32') / 255
+	imageData = adjustImageLevels(imageData)
 				
 	# - extract the bounded area
 	xmin = float(patient[kBoundsX])
 	ymin = float(patient[kBoundsY])
 	xmax = xmin + float(patient[kBoundsWidth])
 	ymax = ymin + float(patient[kBoundsHeight])
+	
+	if hasPneumonia > 1:
+		hasPneumonia = 0
+		xmin = random.randint(0,924)
+		ymin = random.randint(0,924)
+		xmax = random.randint(xmin+1,1024)
+		ymax = random.randint(ymin+1,1024)
+	
 		
 	croppedImage = imageData[int(ymin):int(ymax),int(xmin):int(xmax)]
 	
@@ -85,6 +97,11 @@ if __name__ == '__main__':
 	with open("data/stage_1_train_images.csv") as csv_file:
 		patientInfo = list(csv.reader(csv_file))
 		patientInfo.pop(0)
+	
+	
+	# DEBUG: for sanity purposes, let's try training on a smaller subset of the whole data
+	patientInfo = patientInfo[:10]
+	
 				
 	# 1. Run through all patients without penumonia and make a list with their image paths
 	imagesOfPneumoniaFreePatients = []
@@ -100,5 +117,11 @@ if __name__ == '__main__':
 			saveExtractedImageFromPatient(dcmFilePathForPatient(patient), patient, 1)
 			# Save the image of negative pneumonia
 			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 0)
+			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 2)
+			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 3)
+			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 4)
+			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 5)
+			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 6)
+			saveExtractedImageFromPatient(random.choice(imagesOfPneumoniaFreePatients), patient, 7)
 	
 	

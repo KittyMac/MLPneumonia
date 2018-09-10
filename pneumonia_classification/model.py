@@ -20,32 +20,28 @@ def createModel(loadFromDisk):
 
 	model = Sequential()
 
-	model.add(Conv2D(16, (5, 5), input_shape=(IMG_SIZE[1], IMG_SIZE[0], IMG_SIZE[2])))
+	model.add(Conv2D(64, (6, 6), input_shape=(IMG_SIZE[1], IMG_SIZE[0], IMG_SIZE[2])))
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
 	
-	model.add(Conv2D(32, (3, 3)))
+	model.add(Conv2D(128, (3, 3)))
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
 	
-	model.add(Conv2D(64, (3, 3)))
+	model.add(Conv2D(256, (2, 2)))
 	model.add(Activation('relu'))
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
 			
 	model.add(Flatten())
-	model.add(Dense(2048))
+	model.add(Dense(256))
 	model.add(Activation('relu'))
-	model.add(Dense(1024))
-	model.add(Activation('relu'))
-	model.add(Dense(512))
-	model.add(Activation('relu'))
-	model.add(Dense(2))
-	model.add(Activation('softmax'))
+	model.add(Dense(1))
+	model.add(Activation('sigmoid'))
 	
-	model.compile(loss='categorical_crossentropy', optimizer="adadelta", metrics=['accuracy'])
+	model.compile(loss='binary_crossentropy', optimizer="adadelta", metrics=['accuracy'])
 
 	print(model.summary())
 	
