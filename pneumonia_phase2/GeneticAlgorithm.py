@@ -30,6 +30,10 @@ class GeneticAlgorithm:
 	# generate organisms: delegate received the population index of the new organism, and a uint suitable for seeding a RNG. delegete should return a newly allocated organism with assigned chromosomes.
 	generateOrganism = None
 	
+	# reset organisms: delegate receives the entire population, allowing them to seed the population with the most useful data possible to help speed up computation
+	# this should get called when the population is initially generated.
+	resetOrganisms = None
+	
 	# breed organisms: delegate is given two parents, a child, and a uint suitable for seeding a RNG. delegete should fill out the chromosomes of the child with chromosomes selected from each parent,
 	# along with any possible mutations which might occur.
 	breedOrganisms = None
@@ -54,7 +58,7 @@ class GeneticAlgorithm:
 		return (end - start) * (-(2**(-10 * val / 1)) + 1) + start
 	
 	#@profile
-	def _PerformGenetics (self, millisecondsToProcess, patience, generateOrganism, breedOrganisms, scoreOrganism, chosenOrganism, sharedOrganismIdx=-1, neighborOrganismIdx=-1):
+	def _PerformGenetics (self, millisecondsToProcess, patience, generateOrganism, resetOrganisms, breedOrganisms, scoreOrganism, chosenOrganism, sharedOrganismIdx=-1, neighborOrganismIdx=-1):
 		
 		killer = GracefulKiller()
 		
@@ -78,8 +82,12 @@ class GeneticAlgorithm:
 		# Generate all of the organisms in the population array; score them as well
 		for i in range(0,localNumberOfOrganisms):
 			allOrganisms [i] = generateOrganism (i, localPRNG)
+		
+		if resetOrganisms is not None:
+			resetOrganisms(allOrganisms, localPRNG)
+		
+		for i in range(0,localNumberOfOrganisms):
 			allOrganismScores [i] = scoreOrganism (allOrganisms [i], sharedOrganismIdx, localPRNG)
-	
 		
 		# sort the organisms so the higher fitness are all the end of the array; it is critical
 		# for performance that this array remains sorted during processing (it eliminates the need
@@ -194,7 +202,36 @@ class GeneticAlgorithm:
 				
 				# update the number of generations we have now processed
 				numberOfGenerations += maxBreedingPerGeneration
-				patienceCount += maxBreedingPerGeneration
+				
+				# reset the patience counter when we find new best score
+				if didFindNewBestOrganism:
+					patienceCount = 0
+				
+				# reset the population as we approach our patience goal to allow for
+				# climbing out of local minimums
+				for i in range(0, maxBreedingPerGeneration):
+					patienceCount += 1
+					if patienceCount == (patience // 4) or \
+						patienceCount == (patience // 3) or \
+						patienceCount == (patience // 2) or \
+						patienceCount == (patience * 3) // 4:
+						if resetOrganisms is not None:
+							
+							oldBestScore = allOrganismScores [localNumberOfOrganismsMinusOne]
+							
+							# when we reset the population, we must re-score and re-sort the adjusted population as well
+							numberOfOrganismsReset = resetOrganisms(allOrganisms, localPRNG)
+
+							for i in range(0,numberOfOrganismsReset):
+								allOrganismScores [i] = scoreOrganism (allOrganisms [i], sharedOrganismIdx, localPRNG)
+
+							sortedIndex = np.argsort(allOrganismScores)
+							allOrganismScores = allOrganismScores[sortedIndex]
+							allOrganisms = [allOrganisms[i] for i in sortedIndex]
+							
+							newBestScore = allOrganismScores [localNumberOfOrganismsMinusOne]
+							
+							print("reset %d organisms, patience is %d, best score was %f and now is %f" % (numberOfOrganismsReset, patienceCount, oldBestScore, newBestScore))
 				
 				# if we found a new best organism we should share it
 				if didFindNewBestOrganism and sharedOrganismIdx >= 0 and random.random() < 0.1:
@@ -202,8 +239,6 @@ class GeneticAlgorithm:
 
 				# if we found a new best organism, check with our delegate to see if we need to continue processing or not
 				if (didFindNewBestOrganism and chosenOrganism (allOrganisms [localNumberOfOrganismsMinusOne], allOrganismScores [localNumberOfOrganismsMinusOne], numberOfGenerations, sharedOrganismIdx, localPRNG)):
-					patienceCount = 0
-					
 					# if we're multi-threaded and we found the correct answer, make sure to let all of the other ring-threads know so they can stop too
 					if (sharedOrganismIdx >= 0):
 						self.sharedOrganismsDone = True
@@ -226,7 +261,7 @@ class GeneticAlgorithm:
 		watchStart = time.time()
 		self.masterGenerations = 0
 
-		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough)
+		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.resetOrganisms, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough)
 	
 		watchEnd = time.time()
 	
@@ -318,7 +353,7 @@ class GeneticAlgorithm:
 		
 		self.prng.seed(randomSeed)
 		
-		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough, sharedOrganismIdx, (sharedOrganismIdx + 1) % numThreads)
+		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.resetOrganisms, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough, sharedOrganismIdx, (sharedOrganismIdx + 1) % numThreads)
 		
 		# pass our results back up to the parent process
 		self.workerToParentQueue.put((bestOrganism,self.scoreOrganism (bestOrganism, sharedOrganismIdx, self.prng),self.masterGenerations, self.sharedOrganismsDone))

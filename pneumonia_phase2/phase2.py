@@ -17,6 +17,8 @@ from data import kBoundsHeight
 from data import kTarget
 from data import adjustImageLevels
 
+from keras import backend as keras
+
 from GeneticLocalization import GeneticLocalization
 
 import model
@@ -33,6 +35,8 @@ cnnModel = None
 
 def AdjustPatientImage(patient):
 	
+	keras.clear_session()
+	
 	cnnModel = model.createModel(True)
 	
 	dcmFilePath = dcmFilePathForTrainingPatient(patient)
@@ -45,11 +49,13 @@ def AdjustPatientImage(patient):
 	box = gl.findBox()
 	print("box", box)
 	
-	sourceImg = Image.fromarray(dcmImage * 255).convert("RGB")	
-	draw = ImageDraw.Draw(sourceImg)
-	draw.rectangle(box, outline="yellow")
-		
-	return dcmImage,dcmImage[int(box[1]):int(box[3]),int(box[0]):int(box[2])],sourceImg
+	if box is not None:
+		sourceImg = Image.fromarray(dcmImage * 255).convert("RGB")	
+		draw = ImageDraw.Draw(sourceImg)
+		draw.rectangle(box, outline="yellow")
+		return dcmImage,dcmImage[int(box[1]):int(box[3]),int(box[0]):int(box[2])],sourceImg
+	
+	return dcmImage,dcmImage,sourceImg
 
 	
 def phase1DataManualFixPath(patient):
@@ -83,8 +89,14 @@ if __name__ == '__main__':
 		
 	allPatients = GetAllPatientInfo()
 	
-	if mode == "one":
-		AdjustPatientImage(random.choice(allPatients))
+	if mode == "one" and len(sys.argv) >= 3:
+		# getting stuck on local minimum: 59903052-140b-4065-aa4a-97599a3d0006
+		patientID = mode = sys.argv[2]
+		for patient in allPatients:
+			if patient[kPatientID] == patientID:
+				fullImage,croppedImage,boxImage = AdjustPatientImage(patient)
+				boxImage.show()
+				exit(0)
 	
 	if mode == "hot":
 		while True:

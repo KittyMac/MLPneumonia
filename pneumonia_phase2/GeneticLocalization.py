@@ -111,6 +111,30 @@ class GeneticLocalization:
 			child.validate()
 		self.ga.breedOrganisms = breedOrganisms
 		
+		def resetOrganisms(organisms, prng):
+			# seed half of the population with statistically relevent boxes
+			width = organisms[0].width
+			height = organisms[0].height
+			xminRange = (0.2*width,0.3*width)
+			xmaxRange = (0.7*width,0.8*width)
+			yminRange = (0.2*height,0.3*height)
+			ymaxRange = (0.7*height,0.8*height)
+			
+			num = len(organisms) // 4
+			for i in range(0, num):
+				organisms[i].xmin = int(random.uniform(xminRange[0], xminRange[1]))
+				organisms[i].xmax = int(random.uniform(xmaxRange[0], xmaxRange[1]))
+				organisms[i].ymin = int(random.uniform(yminRange[0], yminRange[1]))
+				organisms[i].ymax = int(random.uniform(ymaxRange[0], ymaxRange[1]))
+			
+			for i in range(num, num*2):
+				organisms[i].randomizeAll (prng)
+				organisms[i].validate ()
+			
+			return num*2
+
+		self.ga.resetOrganisms = resetOrganisms
+		
 		def scoreOrganism (organism, idx, prng):
 			try:
 				cropped = organism.crop(self.npImage)
@@ -125,8 +149,13 @@ class GeneticLocalization:
 		self.ga.scoreOrganism = scoreOrganism
 		
 		def chosenOrganism(organism, score, generation, sharedOrganismIdx, prng):
-			if score >= 0.999:
+			# if we have a perfect score, immediately lose patience looking for a better one
+			if score >= 0.999999:
 				return True
+			# we found a "good enough" score after making a "decent attempt"
+			if score >= 0.999 and generation > 5000:
+				return True
+			# we found shit, keep going
 			return False
 		self.ga.chosenOrganism = chosenOrganism
 		

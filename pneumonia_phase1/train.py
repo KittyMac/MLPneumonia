@@ -44,7 +44,7 @@ def Learn():
 		
 	# 1. create the model
 	print("creating the model")
-	_model = model.createModel(True)
+	_model = model.createModel(False)
 
 	# 2. load all of the samples (if we can...)
 	print("loading samples")
