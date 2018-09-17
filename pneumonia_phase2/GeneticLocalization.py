@@ -115,23 +115,23 @@ class GeneticLocalization:
 			# seed half of the population with statistically relevent boxes
 			width = organisms[0].width
 			height = organisms[0].height
-			xminRange = (0.2*width,0.3*width)
-			xmaxRange = (0.7*width,0.8*width)
-			yminRange = (0.2*height,0.3*height)
-			ymaxRange = (0.7*height,0.8*height)
+			xminRange = (0.1*width,0.3*width)
+			xmaxRange = (0.7*width,0.9*width)
+			yminRange = (0.1*height,0.3*height)
+			ymaxRange = (0.7*height,0.9*height)
 			
 			num = len(organisms) // 4
-			for i in range(0, num):
+			for i in range(0, num*2):
 				organisms[i].xmin = int(random.uniform(xminRange[0], xminRange[1]))
 				organisms[i].xmax = int(random.uniform(xmaxRange[0], xmaxRange[1]))
 				organisms[i].ymin = int(random.uniform(yminRange[0], yminRange[1]))
 				organisms[i].ymax = int(random.uniform(ymaxRange[0], ymaxRange[1]))
 			
-			for i in range(num, num*2):
+			for i in range(num*2, num*3):
 				organisms[i].randomizeAll (prng)
 				organisms[i].validate ()
 			
-			return num*2
+			return num*3
 
 		self.ga.resetOrganisms = resetOrganisms
 		

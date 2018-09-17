@@ -118,6 +118,9 @@ if __name__ == '__main__':
 				if good.lower() == "n":
 					fullImagePIL.save(phase1DataManualFixPath(patient))
 			
+			# remove it from the list so we don't see it again this run through
+			allPatients.remove(patient)
+			
 			cont = raw_input("Continue? Y/N:")
 			if cont.lower() == "y":
 				continue
