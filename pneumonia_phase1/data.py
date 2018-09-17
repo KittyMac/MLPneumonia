@@ -32,7 +32,7 @@ def adjustImageLevels(imageData):
 	return np.clip(imageData * 2.0 - 0.5, 0.0, 1.0)
 
 def dcmFilePathForPatient(patient):
-	return "data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
+	return "../data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
 
 def npyFilePathForPatient(patient, hasPneumonia):
 	return "train/%d.%s.npy" % (hasPneumonia,patient[kPatientID])
@@ -69,6 +69,14 @@ if __name__ == '__main__':
 		exit(0)
 	
 	if mode == "preprocess":
+		# delete existing cache files
+		allFiles = glob.glob("train/*.npy")
+		for path in allFiles:
+			os.remove(path)
+		allFiles = glob.glob("not_train/*.npy")
+		for path in allFiles:
+			os.remove(path)
+		
 		# run through all pngs in the train folder and resize them to the IMG_SIZE the model expects
 		# save them as a .npy file in the same directory
 		allFiles = glob.glob("train/*.png")
@@ -86,7 +94,7 @@ if __name__ == '__main__':
 		patientInfo = []
 	
 		# 0. Load the patient information csv
-		with open("data/stage_1_train_images.csv") as csv_file:
+		with open("../data/stage_1_train_images.csv") as csv_file:
 			patientInfo = list(csv.reader(csv_file))
 			patientInfo.pop(0)
 	

@@ -54,7 +54,7 @@ class GeneticAlgorithm:
 		return (end - start) * (-(2**(-10 * val / 1)) + 1) + start
 	
 	#@profile
-	def _PerformGenetics (self, millisecondsToProcess, generateOrganism, breedOrganisms, scoreOrganism, chosenOrganism, sharedOrganismIdx=-1, neighborOrganismIdx=-1):
+	def _PerformGenetics (self, millisecondsToProcess, patience, generateOrganism, breedOrganisms, scoreOrganism, chosenOrganism, sharedOrganismIdx=-1, neighborOrganismIdx=-1):
 		
 		killer = GracefulKiller()
 		
@@ -69,6 +69,7 @@ class GeneticAlgorithm:
 		
 		# simple counter to keep track of the number of generations (parents selected to breed a child) have passed
 		numberOfGenerations = 0
+		patienceCount = 0
 		
 		# Create the population arrays; one for the organism classes and another to hold the scores of said organisms
 		allOrganisms = [None]*localNumberOfOrganisms
@@ -114,7 +115,7 @@ class GeneticAlgorithm:
 			localEaseOutExpo = self.easeOutExpo
 			localEaseInExpo = self.easeInExpo
 			
-			while (killer.kill_now == False and ((time.time() - watchStart) * 1000) < millisecondsToProcess):
+			while (killer.kill_now == False and ((time.time() - watchStart) * 1000) < millisecondsToProcess and patienceCount < patience):
 				
 				# optimization: we only call chosen organsism below when the new best organism changes
 				didFindNewBestOrganism = False
@@ -193,13 +194,16 @@ class GeneticAlgorithm:
 				
 				# update the number of generations we have now processed
 				numberOfGenerations += maxBreedingPerGeneration
+				patienceCount += maxBreedingPerGeneration
 				
 				# if we found a new best organism we should share it
 				if didFindNewBestOrganism and sharedOrganismIdx >= 0 and random.random() < 0.1:
 					self.sharedOrganismQueue.put_nowait(allOrganisms [localNumberOfOrganismsMinusOne])
 
 				# if we found a new best organism, check with our delegate to see if we need to continue processing or not
-				if (chosenOrganism (allOrganisms [localNumberOfOrganismsMinusOne], allOrganismScores [localNumberOfOrganismsMinusOne], numberOfGenerations, sharedOrganismIdx, localPRNG)):
+				if (didFindNewBestOrganism and chosenOrganism (allOrganisms [localNumberOfOrganismsMinusOne], allOrganismScores [localNumberOfOrganismsMinusOne], numberOfGenerations, sharedOrganismIdx, localPRNG)):
+					patienceCount = 0
+					
 					# if we're multi-threaded and we found the correct answer, make sure to let all of the other ring-threads know so they can stop too
 					if (sharedOrganismIdx >= 0):
 						self.sharedOrganismsDone = True
@@ -217,12 +221,12 @@ class GeneticAlgorithm:
 		self.masterGenerations = generation
 		return self.chosenOrganism(organism, score, generation, sharedOrganismIdx, prng)
 	
-	def PerformGenetics (self, millisecondsToProcess):
+	def PerformGenetics (self, millisecondsToProcess, patience):
 		
 		watchStart = time.time()
 		self.masterGenerations = 0
 
-		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, self.generateOrganism, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough)
+		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough)
 	
 		watchEnd = time.time()
 	
@@ -259,10 +263,10 @@ class GeneticAlgorithm:
 	workerToParentQueue = None
 	sharedOrganismQueue = None
 		
-	def PerformGeneticsThreaded (self, millisecondsToProcess):
+	def PerformGeneticsThreaded (self, millisecondsToProcess, patience):
 		numThreads = multiprocessing.cpu_count()
 		if numThreads == 1:
-			return PerformGenetics (millisecondsToProcess)
+			return PerformGenetics (millisecondsToProcess, patience)
 			
 		watchStart = time.time()
 		
@@ -284,7 +288,7 @@ class GeneticAlgorithm:
 		
 		for i in range(0,numThreads):
 			self.numberOfRunningThreads += 1
-			p = Process(target=self._WorkerProcess, args=(random.random()*9999999,millisecondsToProcess,i,numThreads,))
+			p = Process(target=self._WorkerProcess, args=(random.random()*9999999,millisecondsToProcess,patience,i,numThreads,))
 			p.start()
 			allProcesses.append(p)
 		
@@ -310,11 +314,11 @@ class GeneticAlgorithm:
 
 		return self.masterBestOrganism
 		
-	def _WorkerProcess(self, randomSeed,millisecondsToProcess,sharedOrganismIdx,numThreads):
+	def _WorkerProcess(self, randomSeed,millisecondsToProcess,patience,sharedOrganismIdx,numThreads):
 		
 		self.prng.seed(randomSeed)
 		
-		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, self.generateOrganism, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough, sharedOrganismIdx, (sharedOrganismIdx + 1) % numThreads)
+		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough, sharedOrganismIdx, (sharedOrganismIdx + 1) % numThreads)
 		
 		# pass our results back up to the parent process
 		self.workerToParentQueue.put((bestOrganism,self.scoreOrganism (bestOrganism, sharedOrganismIdx, self.prng),self.masterGenerations, self.sharedOrganismsDone))

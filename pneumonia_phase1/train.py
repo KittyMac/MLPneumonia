@@ -28,7 +28,19 @@ from model import IMG_SIZE
 
 from PIL import Image,ImageDraw
 
+class GracefulKiller:
+	kill_now = False
+	def __init__(self):
+		signal.signal(signal.SIGINT, self.exit_gracefully)
+		signal.signal(signal.SIGTERM, self.exit_gracefully)
+		signal.signal(signal.SIGUSR1, self.exit_gracefully)
+
+	def exit_gracefully(self,signum, frame):
+		self.kill_now = True
+
 def Learn():
+	
+	killer = GracefulKiller()
 		
 	# 1. create the model
 	print("creating the model")
@@ -63,7 +75,10 @@ def Learn():
 		_model.fit(input,output,batch_size=32,shuffle=True,epochs=4,verbose=1)
 	
 		_model.save(model.MODEL_H5_NAME)
-		_model.save("../%s" % (model.MODEL_H5_NAME))
+		_model.save("../pneumonia_phase2/%s" % (model.MODEL_H5_NAME))
+		
+		if killer.kill_now == True:
+			break
 	
 
 if __name__ == '__main__':

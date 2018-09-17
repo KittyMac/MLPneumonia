@@ -208,21 +208,32 @@ def GenerateSubmission():
 	# load all patients from the submission testing data, examine them, and report the results in a CSV files suitable for submission to Kaggle
 	print("GenerateSubmission()")
 
-if __name__ == '__main__':
-	if len(sys.argv) >= 2:
-		if sys.argv[1] == "test":
-			if len(sys.argv) >= 3:
-				try: 
-					num = int(sys.argv[2])
-					TestRandomPatients(num)
-					exit(0)
-				except ValueError:
-					TestPatient(sys.argv[2])
-					exit(0)
-		elif sys.argv[1] == "submit":
-			GenerateSubmission()
-			exit(0)
 
-	TestRandomPatients(1)
+def ProcessPatient(patient):
+	pass
+
+if __name__ == '__main__':
+	
+	mode = "unknown"
+	
+	if len(sys.argv) >= 2:
+		if sys.argv[1] == "one":
+			mode = "one"
+		elif sys.argv[1] == "all":
+			mode = "all"
+	
+	
+	patientInfo = []
+
+	# 0. Load the patient information csv
+	with open("../data/stage_1_train_images.csv") as csv_file:
+		patientInfo = list(csv.reader(csv_file))
+		patientInfo.pop(0)
+	
+	if mode == "one":
+		pass
+	
+	if mode == "all":
+		pass
 
 	
