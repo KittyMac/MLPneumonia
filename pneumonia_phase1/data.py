@@ -23,6 +23,10 @@ kBoundsY = 2
 kBoundsWidth = 3
 kBoundsHeight = 4
 kTarget = 5
+kCropX = 6
+kCropY = 7
+kCropWidth = 8
+kCropHeight = 9
 
 exportCount = 0
 

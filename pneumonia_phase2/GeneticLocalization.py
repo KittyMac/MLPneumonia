@@ -161,7 +161,7 @@ class GeneticLocalization:
 		
 
 	def findBox(self):
-		bestOrgansim, bestScore = self.ga.PerformGenetics(60000, 5000)
+		bestOrgansim, bestScore = self.ga.PerformGenetics(120000, 10000)
 		if bestScore >= 0.5:
 			print("bestScore", bestScore, bestOrgansim.box())
 			return bestOrgansim.box()
