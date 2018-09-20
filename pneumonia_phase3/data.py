@@ -9,6 +9,9 @@ import numpy as np
 import os
 import random
 import os.path
+import sys
+import glob
+import cv2
 from model import IMG_SIZE
 from model import IMG_SUBDIVIDE
 from PIL import Image,ImageDraw
@@ -19,30 +22,26 @@ kBoundsY = 2
 kBoundsWidth = 3
 kBoundsHeight = 4
 kTarget = 5
+kCropX = 6
+kCropY = 7
+kCropWidth = 8
+kCropHeight = 9
 
 kMaxImageOffset = 10
-	
+
 class DCMGenerator():
 	
-	def __init__(self,directory,labelsFile):
-		self.directory = directory
-		self.ignoreCaches = False
-		self.labelsFile = labelsFile
-		self.labelsInfo = []
-		
-		# load in all of the label info if it exists
-		if labelsFile is not None:
-			with open(labelsFile) as csv_file:
-				self.labelsInfo = list(csv.reader(csv_file))
-				self.labelsInfo.pop(0)
-		else:
-			# generate from file names in directory...
+	def __init__(self,finalSubmission):
+		if finalSubmission == True:
+			self.directory = "stage_1_test_images/"
 			self.labelsInfo = []
-			for file in os.listdir(self.directory):
-			    if file.endswith(".dcm"):
-					patient = [os.path.splitext(file)[0], 0, 0, 0, 0, 0]
-					self.labelsInfo.append(patient)
-					
+			allFiles = glob.glob("stage_1_train_images/*.npy")
+			for file in allFiles:
+				patient = [os.path.splitext(file)[0], 0, 0, 0, 0, 0, 0, 0, 0, 0]
+				self.labelsInfo.append(patient)
+		else:
+			self.directory = "stage_1_train_images/"
+			self.labelsInfo = GetPhase3PatientInfo()					
 			
 	def simpleImageAugment(self,imageData,xOff,yOff):
 		# very simple slide x/y image augmentation
@@ -55,37 +54,17 @@ class DCMGenerator():
 		imageData = None
 		
 		patientId = patient[kPatientID]
-		
-		# first check if a cached numpy array file already exists
-		cachedFilePath = self.directory + "/" + patientId + ".npy"
-		dcmFilePath = self.directory + "/" + patientId + ".dcm"
-		
-		if self.ignoreCaches == True or os.path.isfile(cachedFilePath) == False:
-			# load the DCM and process it, saving the resulting numpy array to file
-			dcmData = pydicom.read_file(dcmFilePath)
-			imageData = dcmData.pixel_array
-			
-			# preprocess the image (reshape and normalize)
-			# 1. resize it to IMG_SIZE (ie downsample)
-			# 2. convert to float32
-			# 3. reshape to greyscale
-			# 4. normalize
-			image = Image.fromarray(imageData).convert("RGB")
-						
-			image = image.resize((IMG_SIZE[0],IMG_SIZE[1]), Image.ANTIALIAS)
-			image = image.convert('L')
-			imageData = np.array(image).astype('float32').reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2]) / 255
-			
-			print("caching image: %s" % cachedFilePath)
-			np.save(cachedFilePath, imageData)
-		
-		if imageData is None and os.path.isfile(cachedFilePath) == True:
-			imageData = np.load(cachedFilePath)
 				
-		return imageData
+		imageFilePath = self.directory + "/" + patientId + ".npy"
+		try:
+			return np.load(imageFilePath)
+		except:
+			print("preprocessed file does not exist: ", imageFilePath)
+		
+		exit(1)
 		
 	
-	def generateImages(self,num,augment,positiveSplit):
+	def generateImages(self,num,positiveSplit):
 		
 		localLabelsInfo = self.labelsInfo[:]
 		
@@ -127,7 +106,7 @@ class DCMGenerator():
 			
 			patientIds.append(patient[kPatientID])
 			
-			input2,output2 = self.generateImagesForPatient(patient[kPatientID],augment)
+			input2,output2 = self.generateImagesForPatient(patient[kPatientID])
 			
 			np.copyto(input[i],input2[0])
 			np.copyto(output[i],output2[0])
@@ -137,7 +116,7 @@ class DCMGenerator():
 							
 		return input,output,patientIds
 	
-	def generateImagesForPatient(self,patientID,augment=True):
+	def generateImagesForPatient(self,patientID):
 		
 		localPatientInfo = []
 		for i in range(0,len(self.labelsInfo)):
@@ -150,40 +129,31 @@ class DCMGenerator():
 		output = np.zeros((1,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
 		
 		localPatient = localPatientInfo[0]
-		
-		xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
-		yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
-		
-		if augment == False:
-			xOffForImage = 0
-			yOffForImage = 0
-						
+
 		imageData = self.loadImageForPatientId(localPatient)
-		imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
 		np.copyto(input[0], imageData)
 	
 		if localPatient[kTarget] == "1":
 			# note: we may have multiple data lines per patient, so we want to
 			# combine their outputs such that there is only one combined training sample
 			for patient in localPatientInfo:
-				xOffForBounds = xOffForImage * (1024 / IMG_SIZE[0])
-				yOffForBounds = yOffForImage * (1024 / IMG_SIZE[1])
-			
-				xmin = float(patient[kBoundsX]) + xOffForBounds
-				ymin = float(patient[kBoundsY]) + yOffForBounds
-				xmax = xmin + float(patient[kBoundsWidth])
-				ymax = ymin + float(patient[kBoundsHeight])
+
+				# this is the box at cropped image size & location
+				box = minMaxCroppedBoxForPatient(patient)
+				
+				imgWidth = float(patient[kCropWidth])
+				imgHeight = float(patient[kCropHeight])
 		
-				# Note: the canvas the bounds are in is 1024x1024
-				xdelta = (1024 / IMG_SUBDIVIDE)
-				ydelta = (1024 / IMG_SUBDIVIDE)
+				# Note: the "full size" of the image here is the size of the cropped image
+				xdelta = (imgWidth / IMG_SUBDIVIDE)
+				ydelta = (imgHeight / IMG_SUBDIVIDE)
 				for x in range(0, IMG_SUBDIVIDE):
 					for y in range(0, IMG_SUBDIVIDE):
 						xValue = x * xdelta
 						yValue = y * ydelta
-						if xValue+xdelta >= xmin and xValue <= xmax:
+						if xValue+xdelta >= box[0] and xValue <= box[2]:
 							output[0][x] = 1
-						if yValue+ydelta >= ymin and yValue <= ymax:
+						if yValue+ydelta >= box[1] and yValue <= box[3]:
 							output[0][IMG_SUBDIVIDE+y] = 1
 				
 		return input,output
@@ -292,17 +262,173 @@ class DCMGenerator():
 							if yValue > ymax:
 								ymax = yValue
 			
-			#only boxes with decent width or height are counted
+			# only boxes with decent width or height are counted
 			box = (int(xmin*size[1]),int(ymin*size[0]),int(xmax*size[1]),int(ymax*size[0]))
 			if box[2] - box[0] > 10 and box[3] - box[1] > 10:
 				boxes.append(box)
 				
 		return boxes
 	
-			
+def GetPhase3PatientInfo():
+	patientInfo = []
+	with open("stage_1_train_images.csv") as csv_file:
+		patientInfo = list(csv.reader(csv_file))
+		patientInfo.pop(0)
+	return patientInfo
+
+def dcmFilePathForTrainingPatient(patient):
+	return "../data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
+
+def dcmFilePathForTestingPatient(patient):
+	return "../data/stage_1_test_images/%s.dcm" % (patient[kPatientID])
+
+def minMaxBoxForPatient(patient):
+	x = float(patient[kBoundsX])
+	y = float(patient[kBoundsY])
+	w = float(patient[kBoundsWidth])
+	h = float(patient[kBoundsHeight])
+	return (x,y,x+w,y+h)
+	
+def minMaxCroppedBoxForPatient(patient):
+	cx = float(patient[kCropX])
+	cy = float(patient[kCropY])
+	x = float(patient[kBoundsX])
+	y = float(patient[kBoundsY])
+	w = float(patient[kBoundsWidth])
+	h = float(patient[kBoundsHeight])
+	return ( x-cx, y-cy, (x-cx)+w, (y-cy)+h)
+
+def preprocessImage(imageFile):
+	imageData = cv2.imread(imageFile, 0)
+	imageData = imageData.astype('float32') / 255
+	imageData = cv2.resize(imageData, (IMG_SIZE[0],IMG_SIZE[1])).reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2])
+	outputPath = imageFile[:-4]
+	print("caching image: %s" % outputPath)
+	np.save(outputPath, imageData)
 
 if __name__ == '__main__':
+	
+	mode = "unknown"
+	
+	if len(sys.argv) >= 2:
+		if sys.argv[1] in ["preprocess", "generator_test", "box_test"]:
+			mode = sys.argv[1]
+	
+	if mode == "unknown":
+		print("mode not recognized")
+	
+	if mode == "preprocess":
+		# convert all png images to npy and save them
+		allFiles = glob.glob("stage_1_train_images/*.png")
+		for path in allFiles:
+			preprocessImage(path)
+	
+	if mode == "generator_test":
+		# show two images
+		# one image is the normal size training image with boxes on it
+		# second image is training size image with boxes on it, the boxes calculated from the output
 		
+		patientID = "34858b4b-37ff-4130-be8f-7075f3f3b056"
+		
+		# ------------- First Image -----------------
+		allPatients = GetPhase3PatientInfo()
+		patient = None
+		for otherPatient in allPatients:
+			if otherPatient[kPatientID] == patientID:
+				patient = otherPatient
+		
+		boxes = []
+		for otherPatient in allPatients:
+			if patient[kPatientID] == otherPatient[kPatientID]:
+				boxes.append(minMaxBoxForPatient(otherPatient))
+				
+		# we have a patient, load the image
+		dcmFilePath = dcmFilePathForTrainingPatient(patient)
+		dcmData = pydicom.read_file(dcmFilePath)
+		dcmImage = dcmData.pixel_array.astype('float32') / 255
+		
+		# render the boxes on the normal image and show it
+		colorDcmImage = Image.fromarray(dcmImage * 255.0).convert("RGB")
+		draw = ImageDraw.Draw(colorDcmImage)
+		for box in boxes:
+			draw.rectangle(box, outline="yellow")
+		
+		colorDcmImage.show()
+		
+		
+		# ------------- Second Image -----------------
+		generator = DCMGenerator(False)
+		input,output = generator.generateImagesForPatient(patientID)
+	
+		for i in range(0,len(output)):
+			sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
+		
+			draw = ImageDraw.Draw(sourceImg)
+		
+			boxes = generator.coordinatesFromOutput(output[i],IMG_SIZE)
+			for box in boxes:
+				draw.rectangle(box, outline="yellow")
+			
+			sourceImg.show()
+		
+	
+	if mode == "box_test":
+		# show two images:
+		# one at normal size with the training boxes on it
+		# another at cropped size with the training boxes on it
+		allPatients = GetPhase3PatientInfo()
+		
+		# find a random patient with pneumonia
+		patient = None
+		while(True):
+			randomPatient = random.choice(allPatients)
+			if randomPatient[kTarget] == "1":
+				patient = randomPatient
+				break
+				
+		# find all of the pneumonia boxes for this patient
+		boxes = []
+		for otherPatient in allPatients:
+			if patient[kPatientID] == otherPatient[kPatientID]:
+				boxes.append(minMaxBoxForPatient(otherPatient))
+		
+		# we have a patient, load the image
+		dcmFilePath = dcmFilePathForTrainingPatient(patient)
+		dcmData = pydicom.read_file(dcmFilePath)
+		dcmImage = dcmData.pixel_array.astype('float32') / 255
+		
+		# render the boxes on the normal image and show it
+		colorDcmImage = Image.fromarray(dcmImage * 255.0).convert("RGB")
+		draw = ImageDraw.Draw(colorDcmImage)
+		for box in boxes:
+			draw.rectangle(box, outline="yellow")
+		
+		colorDcmImage.show()
+		
+		# create the cropped image
+		cropBox = [patient[kCropX],
+			patient[kCropY],
+			patient[kCropX] + patient[kCropWidth],
+			patient[kCropY] + patient[kCropHeight]
+		]
+		croppedImage = dcmImage[int(cropBox[1]):int(cropBox[3]),int(cropBox[0]):int(cropBox[2])]
+		
+		# find all of the cropped pneumonia boxes for this patient
+		boxes = []
+		for otherPatient in allPatients:
+			if patient[kPatientID] == otherPatient[kPatientID]:
+				boxes.append(minMaxCroppedBoxForPatient(otherPatient))
+		
+		colorCroppedDcmImage = Image.fromarray(croppedImage * 255.0).convert("RGB")
+		draw = ImageDraw.Draw(colorCroppedDcmImage)
+		for box in boxes:
+			draw.rectangle(box, outline="yellow")
+		
+		colorCroppedDcmImage.show()
+		
+		
+		
+	''''	
 	#generator = DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
 	generator = DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")	
 	generator.ignoreCaches = True
@@ -320,5 +446,6 @@ if __name__ == '__main__':
 			draw.rectangle(box, outline="white")
 		
 		sourceImg.save('/tmp/scan_%d_%s.png' % (i, generator.convertOutputToString(output[i])))
+	'''
 	
 	

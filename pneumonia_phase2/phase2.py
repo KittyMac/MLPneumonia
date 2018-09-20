@@ -54,6 +54,7 @@ def AdjustPatientImage(patient):
 	box = gl.findBox()
 	print("box", box)
 	
+	sourceImg = None
 	if box is not None:
 		sourceImg = Image.fromarray(dcmImage * 255).convert("RGB")	
 		draw = ImageDraw.Draw(sourceImg)
@@ -84,7 +85,7 @@ def dcmFilePathForTrainingPatient(patient):
 	return "../data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
 
 def dcmFilePathForTestingPatient(patient):
-	return "../data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
+	return "../data/stage_1_test_images/%s.dcm" % (patient[kPatientID])
 
 def GetAllPatientInfo():
 	patientInfo = []
@@ -140,6 +141,7 @@ if __name__ == '__main__':
 		
 		# you can specify the number of patients to try on the command line or
 		# you can specify a specific patient by their patientid
+		# you can specify nothing and all patients will be processed
 		onlyThisPatientId = None
 		
 		num = len(allPatients)
@@ -172,7 +174,10 @@ if __name__ == '__main__':
 			# and remove any of the patients we've already processed
 			print("%d existing phase 3 patients" % (len(phase3Patients)))
 			for patient in phase3Patients:
-				patientsToProcess.pop(patient[kPatientID])
+				try:
+					patientsToProcess.pop(patient[kPatientID])
+				except:
+					pass
 		
 		print("%d patients available to process" % (len(patientsToProcess)))
 		
@@ -191,6 +196,11 @@ if __name__ == '__main__':
 			patientEntries = GetPatientByID(patientId, allPatients)
 			
 			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patientEntries[0])
+			if box == None:
+				print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
+				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
+				fullImagePIL.save(phase1DataManualFixPath(patient))
+				continue
 			
 			croppedImagePIL = Image.fromarray(croppedImage * 255).convert("RGB")
 			croppedImagePIL.save(phase3TrainingPath(patientEntries[0]))
@@ -217,6 +227,11 @@ if __name__ == '__main__':
 		for patient in allPatients:
 			if patient[kPatientID] == patientID:
 				fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient)
+				if box == None:
+					print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
+					fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
+					fullImagePIL.save(phase1DataManualFixPath(patient))
+					continue
 				
 				croppedImagePIL = Image.fromarray(croppedImage * 255).convert("RGB")
 				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
@@ -238,6 +253,11 @@ if __name__ == '__main__':
 		while True:
 			patient = random.choice(allPatients)
 			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient)
+			if box == None:
+				print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
+				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
+				fullImagePIL.save(phase1DataManualFixPath(patient))
+				continue
 			
 			croppedImagePIL = Image.fromarray(croppedImage * 255).convert("RGB")
 			fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")

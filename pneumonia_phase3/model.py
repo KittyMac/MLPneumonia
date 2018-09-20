@@ -9,7 +9,7 @@ from keras import optimizers
 from keras.optimizers import SGD
 import os
 
-MODEL_H5_NAME = "model.h5"
+MODEL_H5_NAME = "pneumonia.h5"
 IMG_SIZE = [160,160,1]
 IMG_SUBDIVIDE = 80
 

@@ -37,12 +37,6 @@ class SignalHandler:
     self.stop_processing = True
 ######
 
-def Preprocess():
-	# force all of the images to get cached
-	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")	
-	generator.ignoreCaches = True
-	input,output,patientIds = generator.generateImages(0,False,0.5)
-
 def Learn():
 		
 	# 1. create the model
@@ -51,7 +45,7 @@ def Learn():
 
 	# 2. train the model
 	print("initializing the generator")
-	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
+	generator = data.DCMGenerator(False)
 	
 	iterations = 1000000
 		
@@ -63,7 +57,7 @@ def Learn():
 		if handler.stop_processing:
 			break
 		
-		n = 12000
+		n = 500
 		print(i)
 		Train(generator,_model,n,1)
 		i += n
@@ -75,20 +69,19 @@ def Learn():
 
 
 def Train(generator,_model,n,epocs):
-	train,label,patientIds = generator.generateImages(n,True,0.85)
+	train,label,patientIds = generator.generateImages(n, 0.5)
 	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1)
 
-def Test(filename):
+def Test(patientID):
 	_model = model.createModel(True)
 	
-	generator = data.DCMGenerator("data/stage_1_train_images", "data/stage_1_train_images.csv")
-	#generator = data.DCMGenerator("data/stage_1_test_images", None)
+	generator = data.DCMGenerator(False)
 	
-	if filename is None:
-		input,output,patientIds = generator.generateImages(64,False,0.5)
+	if patientID is None:
+		input,output,patientIds = generator.generateImages(64, 0.5)
 	else:
-		input,output = generator.generateImagesForPatient(filename)
-		patientIds = [filename,filename,filename]
+		input,output = generator.generateImagesForPatient(patientID)
+		patientIds = [patientID,patientID,patientID]
 	
 	results = _model.predict(input)
 	
@@ -107,7 +100,11 @@ def Test(filename):
 			draw.rectangle(box, outline="red")
 		
 		sourceImg.save('/tmp/prediction_%s_t%s_p%s.png' % (patientIds[i], generator.convertOutputToString(output[i]), generator.convertOutputToString(results[i])))
+		
+		if len(output) == 1:
+			sourceImg.show()
 
+'''
 def GenerateSubmission():
 	_model = model.createModel(True)
 	
@@ -134,28 +131,25 @@ def GenerateSubmission():
 			outputFile.write("\n")
 		else:
 			outputFile.write("%s,\n" % patients[i][0])
-
-
-# TODO:
-# 0100515c-5204-4f31-98e0-f35e4b00004a is a false negative
-# 00436515-870c-4b36-a041-de91049b9ab4 example of not identifying separate peaks
-# 41bf2042-53a2-44a8-9a29-55e643af5ac0,14a7fbc6-6661-4382-882f-b2aa317cadc0 has full image bounds?
-# a6b830fb-095b-42ad-a700-dd4d2a4241af is false positive and has full image bounds?
+'''
 
 
 if __name__ == '__main__':
+	
+	mode = "unknown"
+	
 	if len(sys.argv) >= 2:
-		if sys.argv[1] == "test":
-			if len(sys.argv) >= 3:
-				Test(sys.argv[2])
-			else:
-				Test(None)
-		elif sys.argv[1] == "learn":
-			Learn()
-		elif sys.argv[1] == "preprocess":
-			Preprocess()
-		elif sys.argv[1] == "submit":
-			GenerateSubmission()
-	else:
-		Test()
+		if sys.argv[1] in ["learn", "test"]:
+			mode = sys.argv[1]
+	
+	if mode == "learn":
+		Learn()
+	
+	if mode == "test":
+		if len(sys.argv) >= 3:
+			Test(sys.argv[2])
+		else:
+			Test(None)
+	
+	
 	
