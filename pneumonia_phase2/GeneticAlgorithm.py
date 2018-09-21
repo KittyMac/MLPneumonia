@@ -41,6 +41,9 @@ class GeneticAlgorithm:
 	# score organism: delegate is given and organism and should return a float value representing the "fitness" of the organism. Higher scores must always be better scores!
 	scoreOrganism = None
 	
+	# hash organisms: delegate provides a unique identifier (a hash) to represent the orgranism. this is used to cache and look up rescores for lengthy scoring operations
+	hashOrganism = None
+	
 	# choose organism: delegate is given an organism, its fitness score, and the number of generations processed so far. return true to signify this organism's answer is
 	# sufficient and the genetic algorithm should stop; return false to tell the genetic algorithm to keep processing.
 	chosenOrganism = None
@@ -57,12 +60,31 @@ class GeneticAlgorithm:
 	def easeOutExpo (self, start, end, val):
 		return (end - start) * (-(2**(-10 * val / 1)) + 1) + start
 	
+	
+	cacheMisses = 0
+	scoreCalls = 0
+	
+	def _scoreOrganism(self, organism, sharedOrganismIdx, localPRNG, scoreOrganism, hashOrganism, scoreLUT):
+		self.scoreCalls += 1
+		if hashOrganism is not None:
+			key = hashOrganism(organism)
+			score = scoreLUT.get(key)
+			if score is None:
+				self.cacheMisses += 1
+				score = scoreOrganism (organism, sharedOrganismIdx, localPRNG)
+				scoreLUT[key] = score
+			return score
+		else:
+			return scoreOrganism (organism, sharedOrganismIdx, localPRNG)
+	
 	#@profile
-	def _PerformGenetics (self, millisecondsToProcess, patience, generateOrganism, resetOrganisms, breedOrganisms, scoreOrganism, chosenOrganism, sharedOrganismIdx=-1, neighborOrganismIdx=-1):
+	def _PerformGenetics (self, millisecondsToProcess, patience, generateOrganism, resetOrganisms, breedOrganisms, scoreOrganism, hashOrganism, chosenOrganism, sharedOrganismIdx=-1, neighborOrganismIdx=-1):
 		
 		killer = GracefulKiller()
 		
 		localPRNG = self.prng
+		
+		scoreLUT = {}
 		
 		# Replacement window is the number of organisms in the population we should "shuffle down" when we insert a newly born child into the population
 		# This is generally an optimization step for large populations, as shifting the entire array each time a new child is inserted is expensive (and
@@ -87,7 +109,7 @@ class GeneticAlgorithm:
 			resetOrganisms(allOrganisms, localPRNG)
 		
 		for i in range(0,localNumberOfOrganisms):
-			allOrganismScores [i] = scoreOrganism (allOrganisms [i], sharedOrganismIdx, localPRNG)
+			allOrganismScores [i] = self._scoreOrganism(allOrganisms [i], sharedOrganismIdx, localPRNG, scoreOrganism, hashOrganism, scoreLUT)
 		
 		# sort the organisms so the higher fitness are all the end of the array; it is critical
 		# for performance that this array remains sorted during processing (it eliminates the need
@@ -104,7 +126,7 @@ class GeneticAlgorithm:
 		# population array when required, eliminating the need for costly object allocations
 		newChild = generateOrganism (0, localPRNG)
 		trashedChild = newChild
-		childScore = scoreOrganism (newChild, sharedOrganismIdx, localPRNG)
+		childScore = self._scoreOrganism(newChild, sharedOrganismIdx, localPRNG, scoreOrganism, hashOrganism, scoreLUT)
 		
 		# The multi-threaded version of this relies on a ring network of threads to process; if this is the multithreaded version
 		# then we need to include an extra generation step during processing (see comments PerformGeneticsThreaded for overview)
@@ -161,7 +183,7 @@ class GeneticAlgorithm:
 		
 				
 					# record the fitness value of the newly bred child
-					childScore = scoreOrganism (newChild, sharedOrganismIdx, localPRNG)
+					childScore = self._scoreOrganism(newChild, sharedOrganismIdx, localPRNG, scoreOrganism, hashOrganism, scoreLUT)
 
 					# if we're better than the worst member of the population, then the child should be inserted into the population
 					if (childScore > allOrganismScores [0]):
@@ -223,7 +245,7 @@ class GeneticAlgorithm:
 							numberOfOrganismsReset = resetOrganisms(allOrganisms, localPRNG)
 
 							for i in range(0,numberOfOrganismsReset):
-								allOrganismScores [i] = scoreOrganism (allOrganisms [i], sharedOrganismIdx, localPRNG)
+								allOrganismScores [i] = self._scoreOrganism(allOrganisms [i], sharedOrganismIdx, localPRNG, scoreOrganism, hashOrganism, scoreLUT)
 
 							sortedIndex = np.argsort(allOrganismScores)
 							allOrganismScores = allOrganismScores[sortedIndex]
@@ -261,11 +283,13 @@ class GeneticAlgorithm:
 		watchStart = time.time()
 		self.masterGenerations = 0
 
-		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.resetOrganisms, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough)
+		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.resetOrganisms, self.breedOrganisms, self.scoreOrganism, self.hashOrganism, self._CaptureMasterGenerationChosenPassthrough)
 	
 		watchEnd = time.time()
 	
 		print("Done in {}ms and {} generations".format(int((watchEnd-watchStart)*1000), self.masterGenerations))
+		print("  %d generations / sec" % (self.masterGenerations / float((watchEnd-watchStart))))
+		print("  %d%% were duplicated score lookups" % ( int((self.scoreCalls-self.cacheMisses) / self.scoreCalls * 100) ))
 	
 		return (bestOrganism,bestOrganismScore)
 	
@@ -353,7 +377,7 @@ class GeneticAlgorithm:
 		
 		self.prng.seed(randomSeed)
 		
-		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.resetOrganisms, self.breedOrganisms, self.scoreOrganism, self._CaptureMasterGenerationChosenPassthrough, sharedOrganismIdx, (sharedOrganismIdx + 1) % numThreads)
+		bestOrganism,bestOrganismScore = self._PerformGenetics (millisecondsToProcess, patience, self.generateOrganism, self.resetOrganisms, self.breedOrganisms, self.scoreOrganism, self.hashOrganism, self._CaptureMasterGenerationChosenPassthrough, sharedOrganismIdx, (sharedOrganismIdx + 1) % numThreads)
 		
 		# pass our results back up to the parent process
 		self.workerToParentQueue.put((bestOrganism,self.scoreOrganism (bestOrganism, sharedOrganismIdx, self.prng),self.masterGenerations, self.sharedOrganismsDone))

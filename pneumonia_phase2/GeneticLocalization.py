@@ -23,6 +23,17 @@ class Organism:
 	def __repr__(self):
 		return "(%d,%d,%d,%d)" % (self.xmin, self.ymin, self.xmax, self.ymax)
 	
+	def hash (self):
+		#return "%d,%d,%d,%d" % (self.xmin, self.ymin, self.xmax, self.ymax)
+		h = self.xmin
+		h *= 2000
+		h += self.ymin
+		h *= 2000
+		h += self.xmax
+		h *= 2000
+		h += self.ymax
+		return h
+	
 	def randomize(self,index,prng):
 		if index == 0:
 			self.xmin = prng.randint(0,self.xmax-self.minSize)
@@ -146,6 +157,10 @@ class GeneticLocalization:
 			return num*3
 
 		self.ga.resetOrganisms = resetOrganisms
+		
+		def hashOrganism (organism):
+			return organism.hash()
+		self.ga.hashOrganism = hashOrganism
 		
 		def scoreOrganism (organism, idx, prng):
 			try:
