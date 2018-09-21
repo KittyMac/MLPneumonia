@@ -16,6 +16,10 @@ from model import IMG_SIZE
 from model import IMG_SUBDIVIDE
 from PIL import Image,ImageDraw
 
+import multiprocessing
+from multiprocessing import Pool
+from contextlib import closing
+
 kPatientID = 0
 kBoundsX = 1
 kBoundsY = 2
@@ -306,6 +310,9 @@ def preprocessImage(imageFile):
 	print("caching image: %s" % outputPath)
 	np.save(outputPath, imageData)
 
+def deleteFile(path):
+	os.remove(path)
+
 if __name__ == '__main__':
 	
 	mode = "unknown"
@@ -318,10 +325,20 @@ if __name__ == '__main__':
 		print("mode not recognized")
 	
 	if mode == "preprocess":
+		# remove all existing npy cache files
+		allCaches = glob.glob("stage_1_train_images/*.npy")
+		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
+		    pool.map(deleteFile, allCaches)
+		    pool.terminate()
 		# convert all png images to npy and save them
-		allFiles = glob.glob("stage_1_train_images/*.png")
-		for path in allFiles:
-			preprocessImage(path)
+		allImages = glob.glob("stage_1_train_images/*.png")
+		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
+		    pool.map(preprocessImage, allImages)
+		    pool.terminate()
+		
+		
+		#for path in allFiles:
+		#	preprocessImage(path)
 	
 	if mode == "generator_test":
 		# show two images

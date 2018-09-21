@@ -17,6 +17,10 @@ from PIL import Image,ImageDraw
 import cv2
 import glob
 
+import multiprocessing
+from multiprocessing import Pool
+from contextlib import closing
+
 kPatientID = 0
 kBoundsX = 1
 kBoundsY = 2
@@ -56,7 +60,9 @@ def preprocessImage(imageFile):
 	outputPath = imageFile[:-4]
 	print("caching image: %s" % outputPath)
 	np.save(outputPath, imageData)
-	
+
+def deleteFile(path):
+	os.remove(path)
 
 if __name__ == '__main__':
 	
@@ -73,22 +79,20 @@ if __name__ == '__main__':
 		exit(0)
 	
 	if mode == "preprocess":
-		# delete existing cache files
-		allFiles = glob.glob("train/*.npy")
-		for path in allFiles:
-			os.remove(path)
-		allFiles = glob.glob("not_train/*.npy")
-		for path in allFiles:
-			os.remove(path)
-		
-		# run through all pngs in the train folder and resize them to the IMG_SIZE the model expects
-		# save them as a .npy file in the same directory
-		allFiles = glob.glob("train/*.png")
-		for path in allFiles:
-			preprocessImage(path)
-		allFiles = glob.glob("not_train/*.png")
-		for path in allFiles:
-			preprocessImage(path)
+		# remove all existing npy cache files
+		allCaches1 = glob.glob("train/*.npy")
+		allCaches2 = glob.glob("not_train/*.npy")
+		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
+			pool.map(deleteFile, allCaches1)
+			pool.map(deleteFile, allCaches2)
+			pool.terminate()
+		# convert all png images to npy and save them
+		allImages1 = glob.glob("train/*.png")
+		allImages2 = glob.glob("not_train/*.png")
+		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
+			pool.map(preprocessImage, allImages1)
+			pool.map(preprocessImage, allImages2)
+			pool.terminate()
 	
 	if mode == "extract":
 		# Run through some number of samples from the training set, convert them to pngs and put them

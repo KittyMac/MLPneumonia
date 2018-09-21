@@ -42,6 +42,20 @@ class Organism:
 		self.xmax = prng.randint(self.xmin+self.minSize,self.width)
 		self.ymax = prng.randint(self.ymin+self.minSize,self.height)
 	
+	
+	def resetAll(self,prng):
+		w = self.width
+		h = self.height
+		xminRange = (0.1*w,0.3*w)
+		xmaxRange = (0.7*w,0.9*w)
+		yminRange = (0.1*h,0.3*h)
+		ymaxRange = (0.7*h,0.9*h)
+		
+		self.xmin = int(prng.uniform(xminRange[0], xminRange[1]))
+		self.xmax = int(prng.uniform(xmaxRange[0], xmaxRange[1]))
+		self.ymin = int(prng.uniform(yminRange[0], yminRange[1]))
+		self.ymax = int(prng.uniform(ymaxRange[0], ymaxRange[1]))
+	
 	def validate(self):
 		if self.xmax < self.xmin:
 			t = self.xmin
@@ -85,7 +99,7 @@ class GeneticLocalization:
 		self.cnnModelImageSize = cnnModelImageSize
 		
 		self.ga = GeneticAlgorithm()
-		self.ga.numberOfOrganisms = 512
+		self.ga.numberOfOrganisms = 2048
 		
 		def generateOrganism (idx,prng):
 			o = Organism (1024,1024)
@@ -104,28 +118,26 @@ class GeneticLocalization:
 				child.ymin = organismA.ymin if prng.random() > 0.5 else organismB.ymin
 				child.ymax = organismA.ymax if prng.random() > 0.5 else organismB.ymax
 
-				if prng.random() > 0.5:
+				r = prng.randint(0,6)
+				if r == 0:
 					child.randomizeOne(prng)
-				elif prng.random() > 0.5:
+				elif r == 1:
+					child.randomizeOne(prng)
+					child.randomizeOne(prng)
+				elif r == 2:
 					child.randomizeAll(prng)
+				elif r == 3:
+					child.resetAll(prng)
+					
 			child.validate()
 		self.ga.breedOrganisms = breedOrganisms
 		
 		def resetOrganisms(organisms, prng):
 			# seed half of the population with statistically relevent boxes
-			width = organisms[0].width
-			height = organisms[0].height
-			xminRange = (0.1*width,0.3*width)
-			xmaxRange = (0.7*width,0.9*width)
-			yminRange = (0.1*height,0.3*height)
-			ymaxRange = (0.7*height,0.9*height)
-			
 			num = len(organisms) // 4
 			for i in range(0, num*2):
-				organisms[i].xmin = int(random.uniform(xminRange[0], xminRange[1]))
-				organisms[i].xmax = int(random.uniform(xmaxRange[0], xmaxRange[1]))
-				organisms[i].ymin = int(random.uniform(yminRange[0], yminRange[1]))
-				organisms[i].ymax = int(random.uniform(ymaxRange[0], ymaxRange[1]))
+				organisms[i].resetAll(prng)
+				organisms[i].validate ()
 			
 			for i in range(num*2, num*3):
 				organisms[i].randomizeAll (prng)

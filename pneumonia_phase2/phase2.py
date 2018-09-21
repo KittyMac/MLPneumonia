@@ -78,8 +78,8 @@ def phase1DataManualFixPath(patient):
 
 def phase1DataTrainingPath(patient, isGood):
 	if isGood:
-		return "../pneumonia_phase1/train/%s.png" % (patient[kPatientID])
-	return "../pneumonia_phase1/not_train/%s.png" % (patient[kPatientID])
+		return "../pneumonia_phase1/train/%d.%s.png" % (int(random.random() * 1000), patient[kPatientID])
+	return "../pneumonia_phase1/not_train/%d.%s.png" % (int(random.random() * 1000), patient[kPatientID])
 
 def dcmFilePathForTrainingPatient(patient):
 	return "../data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
