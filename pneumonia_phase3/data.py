@@ -81,16 +81,11 @@ class DCMGenerator():
 	
 	def generateImages(self,num,positiveSplit):
 		
+		# 1. we do not want duplicates
+		# 2. we want to combine patients into a single image
+		
 		localLabelsInfo = self.labelsInfo[:]
-		
-		randomSelection = True
-		if num <= 0:
-			num = len(localLabelsInfo)
-			randomSelection = False
-		
-		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
-		output = np.zeros((num,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
-		
+						
 		random.shuffle(localLabelsInfo)
 		
 		patientIds = []
@@ -98,36 +93,54 @@ class DCMGenerator():
 		numPositive = 0
 		numNegative = 0
 		
+		processedPatientList = []
+		
 		for i in range(0,num):
 			
-			if randomSelection:
-				attempts = 10000
-				while attempts > 0:
-					patient = random.choice(localLabelsInfo)
-					
-					if numPositive <= (numNegative+numPositive)*positiveSplit and patient[kTarget] == "1":
-						numPositive += 1
-						break
-					if numPositive > (numNegative+numPositive)*positiveSplit and patient[kTarget] == "0":
-						numNegative += 1
-						break
-					
-					attempts -= 1
-			else:
-				patient = localLabelsInfo[i]
+			if len(localLabelsInfo) == 0:
+				break
 			
-			if num < len(localLabelsInfo):
-				localLabelsInfo.remove(patient)
+			# random selection with attempt to balance the patient population
+			attempts = 10000
+			while attempts > 0:
+				patient = random.choice(localLabelsInfo)
+				if numPositive <= (numNegative+numPositive)*positiveSplit and patient[kTarget] == "1":
+					break
+				if numPositive > (numNegative+numPositive)*positiveSplit and patient[kTarget] == "0":
+					break
+				attempts -= 1
+			
+			if attempts <= 0:
+				# we could not find any of the right kind of patients left to balance population, so end early
+				break
+			
+			if patient[kTarget] == "1":
+				numPositive += 1
+			else:
+				numNegative += 1
+			
+			# remove all references of this patient from localLabelsInfo so we do not duplicate
+			for duplicatePatient in self.labelsInfo:
+				if patient[kPatientID] == duplicatePatient[kPatientID]:
+					localLabelsInfo.remove(duplicatePatient)
 			
 			patientIds.append(patient[kPatientID])
 			
 			input2,output2 = self.generateImagesForPatient(patient[kPatientID])
 			
-			np.copyto(input[i],input2[0])
-			np.copyto(output[i],output2[0])
+			processedPatientList.append( (patient, input2[0], output2[0]) )
 		
-		if randomSelection:
-			print(numPositive, numNegative)
+		num = len(processedPatientList)
+		
+		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
+		output = np.zeros((num,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
+		
+		for i in range(0,len(processedPatientList)):
+			processedPatient = processedPatientList[i]
+			np.copyto(input[i], processedPatient[1])
+			np.copyto(output[i], processedPatient[2])
+		
+		print(numPositive, numNegative)
 							
 		return input,output,patientIds
 	
@@ -357,9 +370,6 @@ if __name__ == '__main__':
 		    pool.map(preprocessImage, allImages)
 		    pool.terminate()
 		
-		
-		#for path in allFiles:
-		#	preprocessImage(path)
 	
 	if mode == "generator_test":
 		# show two images

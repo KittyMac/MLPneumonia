@@ -54,9 +54,14 @@ validationSamples = [
 ]
 
 
-# Load lots of samples (all if possible), training in one call to .fit with
-# lots of epochs and use an optimizer like rmsprop
 def Learn1():
+	
+	# New tests:
+	# 0. Baseline (no augmentation, 0.5 split, old model, no duplicates)
+	# 1. Only train on postitive samples
+	# 2. Auto-levels images in preprocess stage
+	# 3. Less conv2d more dense layers
+	
 	
 	print("Learning Phase 1")
 	
@@ -69,13 +74,17 @@ def Learn1():
 	generator = data.DCMGenerator(False, validationSamples, False)
 	
 	# number of images to generate
-	n = 20000
+	n = 5000
 	
 	# train hard for a long time on this sample set
 	Train(generator,_model,n,100)
 	
 	_model.save(model.MODEL_H5_NAME)
 
+def Train(generator,_model,n,epocs):
+	checkpoint = ModelCheckpoint(model.MODEL_H5_NAME, monitor='acc', verbose=0, save_best_only=True, mode='max')
+	train,label,patientIds = generator.generateImages(n, 0.5)
+	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1,callbacks=[checkpoint])
 
 # Load smaller chunks of samples to maximize data augmentation. Use an SGD with a low
 # weight so we can "fine tune" into the data augmentation
@@ -87,7 +96,7 @@ def Learn2():
 
 	# 2. train the model
 	print("initializing the generator")
-	generator = data.DCMGenerator(False, validationSamples, True)
+	generator = data.DCMGenerator(False, validationSamples, False)
 	
 	iterations = 1000000
 		
@@ -110,28 +119,6 @@ def Learn2():
 	_model.save(model.MODEL_H5_NAME)
 
 
-class EarlyStoppingByAcc(Callback):
-    def __init__(self, monitor='acc', value=0.00001, verbose=0):
-        super(Callback, self).__init__()
-        self.monitor = monitor
-        self.value = value
-        self.verbose = verbose
-
-    def on_epoch_end(self, epoch, logs={}):
-        current = logs.get(self.monitor)
-        if current is None:
-            warnings.warn("Early stopping requires %s available!" % self.monitor, RuntimeWarning)
-
-        if current > self.value:
-            if self.verbose > 0:
-                print("Epoch %05d: early stopping THR" % epoch)
-            self.model.stop_training = True
-
-def Train(generator,_model,n,epocs):
-	checkpoint = ModelCheckpoint(model.MODEL_H5_NAME, monitor='acc', verbose=0, save_best_only=True, mode='max')
-	earlystop = EarlyStoppingByAcc(monitor='acc', value=0.92)
-	train,label,patientIds = generator.generateImages(n, 0.5)
-	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1,callbacks=[checkpoint,earlystop])
 
 
 
