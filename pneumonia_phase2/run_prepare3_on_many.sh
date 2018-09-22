@@ -1,9 +1,10 @@
 #!/bin/sh
 
 
-python phase2.py one 4a2abe71-8cd4-4d57-978d-2da7d67bd80d
-python phase2.py one 15c9162f-953a-48e3-a125-f2ab70ca03d5
-python phase2.py one 76fc7c09-6987-449d-a6c6-50b1579a5d1a
+python phase2.py prepare3 430c807a-f0bc-4a24-9304-c8a129dfc80a
+python phase2.py prepare3 a6236ddd-6367-4569-b5f1-07d2df9390ad
+python phase2.py prepare3 65336113-bed0-4b8b-b6eb-a56aef061389
+python phase2.py prepare3 15c9162f-953a-48e3-a125-f2ab70ca03d5
 
 
 #python phase2.py prepare3 ef5c53b4-cf61-4374-b4ae-9a5ac025848b

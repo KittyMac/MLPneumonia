@@ -2,6 +2,10 @@ from __future__ import division
 
 from keras import backend as keras
 
+from keras.callbacks import ModelCheckpoint
+from keras.callbacks import EarlyStopping
+from keras.callbacks import Callback
+
 from keras.preprocessing import sequence
 from dateutil import parser
 import numpy as np
@@ -37,15 +41,53 @@ class SignalHandler:
     self.stop_processing = True
 ######
 
-def Learn():
+
+validationSamples = [
+	"a6236ddd-6367-4569-b5f1-07d2df9390ad",
+	"3cbd12c8-6302-43b1-a28c-fcc892540c2e",
+	"359355a8-5981-406a-a8c3-3dcfdde9169e",
+	"f02fe6d5-c4ac-4c83-9d9d-5274eb3488d5",
+	"34d340bd-2928-41cb-8d2a-98ba84999a01",
+	"7c5188fb-01b8-4923-9715-83f13a5e861b",
+	"de304f9b-f407-43d5-89b9-bdb07f8308b1",
+	"3b66da46-f0a2-4e41-bd6d-68a8ba799708",
+]
+
+
+# Load lots of samples (all if possible), training in one call to .fit with
+# lots of epochs and use an optimizer like rmsprop
+def Learn1():
+	
+	print("Learning Phase 1")
+	
+	# 1. create the model
+	print("creating the model")
+	_model = model.createModel(1, True)
+	
+	# 2. train the model
+	print("initializing the generator")
+	generator = data.DCMGenerator(False, validationSamples, False)
+	
+	# number of images to generate
+	n = 20000
+	
+	# train hard for a long time on this sample set
+	Train(generator,_model,n,100)
+	
+	_model.save(model.MODEL_H5_NAME)
+
+
+# Load smaller chunks of samples to maximize data augmentation. Use an SGD with a low
+# weight so we can "fine tune" into the data augmentation
+def Learn2():
 		
 	# 1. create the model
 	print("creating the model")
-	_model = model.createModel(True)
+	_model = model.createModel(1, True)
 
 	# 2. train the model
 	print("initializing the generator")
-	generator = data.DCMGenerator(False)
+	generator = data.DCMGenerator(False, validationSamples, True)
 	
 	iterations = 1000000
 		
@@ -57,7 +99,7 @@ def Learn():
 		if handler.stop_processing:
 			break
 		
-		n = 500
+		n = 5000
 		print(i)
 		Train(generator,_model,n,1)
 		i += n
@@ -68,14 +110,36 @@ def Learn():
 	_model.save(model.MODEL_H5_NAME)
 
 
+class EarlyStoppingByAcc(Callback):
+    def __init__(self, monitor='acc', value=0.00001, verbose=0):
+        super(Callback, self).__init__()
+        self.monitor = monitor
+        self.value = value
+        self.verbose = verbose
+
+    def on_epoch_end(self, epoch, logs={}):
+        current = logs.get(self.monitor)
+        if current is None:
+            warnings.warn("Early stopping requires %s available!" % self.monitor, RuntimeWarning)
+
+        if current > self.value:
+            if self.verbose > 0:
+                print("Epoch %05d: early stopping THR" % epoch)
+            self.model.stop_training = True
+
 def Train(generator,_model,n,epocs):
+	checkpoint = ModelCheckpoint(model.MODEL_H5_NAME, monitor='acc', verbose=0, save_best_only=True, mode='max')
+	earlystop = EarlyStoppingByAcc(monitor='acc', value=0.92)
 	train,label,patientIds = generator.generateImages(n, 0.5)
-	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1)
+	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1,callbacks=[checkpoint,earlystop])
+
+
+
 
 def Test(patientID):
-	_model = model.createModel(True)
+	_model = model.createModel(True, False)
 	
-	generator = data.DCMGenerator(False)
+	generator = data.DCMGenerator(False, None, False)
 	
 	if patientID is None:
 		input,output,patientIds = generator.generateImages(64, 0.5)
@@ -106,7 +170,7 @@ def Test(patientID):
 
 '''
 def GenerateSubmission():
-	_model = model.createModel(True)
+	_model = model.createModel(True, False)
 	
 	print("loading submission images")
 	generator = data.DCMGenerator("data/stage_1_test_images", None)
@@ -139,11 +203,18 @@ if __name__ == '__main__':
 	mode = "unknown"
 	
 	if len(sys.argv) >= 2:
-		if sys.argv[1] in ["learn", "test"]:
+		if sys.argv[1] in ["learn", "learn1", "learn2", "test"]:
 			mode = sys.argv[1]
-	
+		
 	if mode == "learn":
-		Learn()
+		Learn1()
+		Learn2()
+	
+	if mode == "learn1":
+		Learn1()
+	
+	if mode == "learn2":
+		Learn2()
 	
 	if mode == "test":
 		if len(sys.argv) >= 3:

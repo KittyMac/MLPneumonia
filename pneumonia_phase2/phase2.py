@@ -38,7 +38,7 @@ interactiveMode = True
 cnnModel = None
 
 
-def AdjustPatientImage(patient):
+def AdjustPatientImage(patient, weightedRandoms):
 	
 	keras.clear_session()
 	
@@ -49,7 +49,7 @@ def AdjustPatientImage(patient):
 	dcmImage = dcmData.pixel_array.astype('float32') / 255
 	
 	print("adjusting image at:", dcmFilePath)	
-	gl = GeneticLocalization(dcmImage,cnnModel,(IMG_SIZE[0],IMG_SIZE[1]))
+	gl = GeneticLocalization(dcmImage,cnnModel,(IMG_SIZE[0],IMG_SIZE[1]),weightedRandoms)
 	
 	box = gl.findBox()
 	print("box", box)
@@ -108,6 +108,86 @@ def GetPatientByID(patientID, allPatients):
 			patientEntries.append(patient)
 	return patientEntries
 
+def GetBoundingBoxWeightedArrays():
+	# run through all phase3 patients
+	# get their crop boxes in xmin,ymin,xmax,ymax
+	# create two numpy arrays per value, to be used for weighted randoms
+	allPatients = GetExistingPhase3PatientInfo()
+	
+	maxValue = 2048
+	
+	xminCount = np.zeros((maxValue,1))
+	yminCount = np.zeros((maxValue,1))
+	xmaxCount = np.zeros((maxValue,1))
+	ymaxCount = np.zeros((maxValue,1))
+	
+	xminList = []
+	xminWeights = []
+	xmaxList = []
+	xmaxWeights = []
+	yminList = []
+	yminWeights = []
+	ymaxList = []
+	ymaxWeights = []
+	
+	for patient in allPatients:
+		xmin = int(patient[kCropX])
+		ymin = int(patient[kCropY])
+		xmax = xmin + int(patient[kCropWidth])
+		ymax = ymin + int(patient[kCropHeight])
+		
+		xminCount[xmin] += 1
+		yminCount[ymin] += 1
+		xmaxCount[xmax] += 1
+		ymaxCount[ymax] += 1		
+		
+	xminSum = np.sum(xminCount)
+	xmaxSum = np.sum(xmaxCount)
+	yminSum = np.sum(yminCount)
+	ymaxSum = np.sum(ymaxCount)
+	
+	for i in range(0,maxValue):
+		if xminCount[i] > 0:
+			xminList.append(i)
+			xminWeights.append(xminCount[i][0] / xminSum)
+		if xmaxCount[i] > 0:
+			xmaxList.append(i)
+			xmaxWeights.append(xmaxCount[i][0] / xmaxSum)
+		if yminCount[i] > 0:
+			yminList.append(i)
+			yminWeights.append(yminCount[i][0] / yminSum)
+		if ymaxCount[i] > 0:
+			ymaxList.append(i)
+			ymaxWeights.append(ymaxCount[i][0] / ymaxSum)
+	
+	weightedRandoms = {}
+	
+	xminListNP = np.empty(len(xminList), dtype=object)
+	xminListNP[:] = xminList
+	yminListNP = np.empty(len(xminList), dtype=object)
+	yminListNP[:] = xminList
+	xmaxListNP = np.empty(len(ymaxList), dtype=object)
+	xmaxListNP[:] = ymaxList
+	ymaxListNP = np.empty(len(ymaxList), dtype=object)
+	ymaxListNP[:] = ymaxList
+	
+	xminWeightsNP = np.empty(len(xminWeights), dtype=float)
+	xminWeightsNP[:] = xminWeights
+	yminWeightsNP = np.empty(len(xminWeights), dtype=float)
+	yminWeightsNP[:] = xminWeights
+	xmaxWeightsNP = np.empty(len(ymaxWeights), dtype=float)
+	xmaxWeightsNP[:] = ymaxWeights
+	ymaxWeightsNP = np.empty(len(ymaxWeights), dtype=float)
+	ymaxWeightsNP[:] = ymaxWeights
+	
+	weightedRandoms["xmin"] = (xminListNP, xminWeightsNP)
+	weightedRandoms["ymin"] = (yminListNP, yminWeightsNP)
+	weightedRandoms["xmax"] = (xmaxListNP, xmaxWeightsNP)
+	weightedRandoms["ymax"] = (ymaxListNP, ymaxWeightsNP)
+	
+	return weightedRandoms
+	
+
 if __name__ == '__main__':
 	
 	mode = "unknown"
@@ -115,7 +195,10 @@ if __name__ == '__main__':
 	if len(sys.argv) >= 2:
 		if sys.argv[1] in ["one", "all", "hot", "prepare3", "reset3"]:
 			mode = sys.argv[1]
-		
+	
+	
+	weightedRandoms = GetBoundingBoxWeightedArrays()
+	
 	allPatients = GetAllPatientInfo()
 	
 	if mode == "reset3":
@@ -195,7 +278,7 @@ if __name__ == '__main__':
 			
 			patientEntries = GetPatientByID(patientId, allPatients)
 			
-			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patientEntries[0])
+			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patientEntries[0], weightedRandoms)
 			if box == None:
 				print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
 				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
@@ -226,7 +309,7 @@ if __name__ == '__main__':
 		patientID = sys.argv[2]
 		for patient in allPatients:
 			if patient[kPatientID] == patientID:
-				fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient)
+				fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient, weightedRandoms)
 				if box == None:
 					print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
 					fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
@@ -252,7 +335,7 @@ if __name__ == '__main__':
 	if mode == "hot":
 		while True:
 			patient = random.choice(allPatients)
-			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient)
+			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient, weightedRandoms)
 			if box == None:
 				print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
 				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
@@ -285,6 +368,6 @@ if __name__ == '__main__':
 	
 	if mode == "all":
 		for patient in allPatients:
-			AdjustPatientImage(patient)
+			AdjustPatientImage(patient, weightedRandoms)
 
 	

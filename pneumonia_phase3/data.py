@@ -31,11 +31,14 @@ kCropY = 7
 kCropWidth = 8
 kCropHeight = 9
 
-kMaxImageOffset = 10
+kMaxImageOffset = 4
+
+kThreshold = 0.5
 
 class DCMGenerator():
 	
-	def __init__(self,finalSubmission):
+	def __init__(self,finalSubmission,validationSamples,shouldAugment):
+		self.shouldAugment = shouldAugment
 		if finalSubmission == True:
 			self.directory = "stage_1_test_images/"
 			self.labelsInfo = []
@@ -45,8 +48,16 @@ class DCMGenerator():
 				self.labelsInfo.append(patient)
 		else:
 			self.directory = "stage_1_train_images/"
-			self.labelsInfo = GetPhase3PatientInfo()					
-			
+			self.labelsInfo = GetPhase3PatientInfo()
+			if validationSamples is not None:
+				for patient in self.labelsInfo[:]:
+					if patient[kPatientID] in validationSamples:
+						print("removing patient for validation: %s" % (patient[kPatientID]))
+						self.labelsInfo.remove(patient)
+	
+	def numberOfSamples(self):
+		return len(self.labelsInfo)
+	
 	def simpleImageAugment(self,imageData,xOff,yOff):
 		# very simple slide x/y image augmentation
 		imageData = np.roll(imageData, int(xOff), axis=1)
@@ -133,20 +144,30 @@ class DCMGenerator():
 		output = np.zeros((1,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
 		
 		localPatient = localPatientInfo[0]
+		
+		xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+		yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
+		
+		if self.shouldAugment == False:
+			xOffForImage = 0
+			yOffForImage = 0
 
 		imageData = self.loadImageForPatientId(localPatient)
+		imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
 		np.copyto(input[0], imageData)
 	
 		if localPatient[kTarget] == "1":
 			# note: we may have multiple data lines per patient, so we want to
 			# combine their outputs such that there is only one combined training sample
 			for patient in localPatientInfo:
-
-				# this is the box at cropped image size & location
-				box = minMaxCroppedBoxForPatient(patient)
-				
 				imgWidth = float(patient[kCropWidth])
 				imgHeight = float(patient[kCropHeight])
+				
+				xOffForBounds = xOffForImage * (imgWidth / IMG_SIZE[0])
+				yOffForBounds = yOffForImage * (imgHeight / IMG_SIZE[1])
+
+				# this is the box at cropped image size & location
+				box = minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds)
 		
 				# Note: the "full size" of the image here is the size of the cropped image
 				xdelta = (imgWidth / IMG_SUBDIVIDE)
@@ -178,7 +199,7 @@ class DCMGenerator():
 	def convertOutputToString(self,output):
 		for x in range(0,IMG_SUBDIVIDE):
 			for y in range(0,IMG_SUBDIVIDE):
-				if output[x] >= 0.5 and output[IMG_SUBDIVIDE+y] >= 0.5:
+				if output[x] >= kThreshold and output[IMG_SUBDIVIDE+y] >= kThreshold:
 					return 1
 		return 0
 	
@@ -197,11 +218,11 @@ class DCMGenerator():
 			xValue = (x*xdelta)
 			
 			# step forward until we find the first peak
-			if output[x] >= 0.5:
+			if output[x] >= kThreshold:
 				# ensure this peak is large enough (ignore little peaks)
 				isPeak = False
 				for x2 in range(x,IMG_SUBDIVIDE):
-					if output[x2] < 0.5:
+					if output[x2] < kThreshold:
 						if x2 - x > minPeakSize:
 							isPeak = True
 				
@@ -209,7 +230,7 @@ class DCMGenerator():
 				if isPeak:
 					peakIdx += 1
 					for x2 in range(x,IMG_SUBDIVIDE):
-						if output[x2] >= 0.5:
+						if output[x2] >= kThreshold:
 							peak_indentity[x2] = peakIdx
 						else:
 							break
@@ -256,7 +277,7 @@ class DCMGenerator():
 					yValue = (y*ydelta)
 					
 					if x_peaks[x] == peakIdx:
-						if output[x] >= 0.5 and output[IMG_SUBDIVIDE+y] >= 0.5:
+						if output[x] >= kThreshold and output[IMG_SUBDIVIDE+y] >= kThreshold:
 							if xValue < xmin:
 								xmin = xValue
 							if xValue > xmax:
@@ -293,14 +314,14 @@ def minMaxBoxForPatient(patient):
 	h = float(patient[kBoundsHeight])
 	return (x,y,x+w,y+h)
 	
-def minMaxCroppedBoxForPatient(patient):
+def minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds):
 	cx = float(patient[kCropX])
 	cy = float(patient[kCropY])
 	x = float(patient[kBoundsX])
 	y = float(patient[kBoundsY])
 	w = float(patient[kBoundsWidth])
 	h = float(patient[kBoundsHeight])
-	return ( x-cx, y-cy, (x-cx)+w, (y-cy)+h)
+	return ( (x-cx)+xOffForBounds, (y-cy)+yOffForBounds, ((x-cx)+xOffForBounds)+w, ((y-cy)+yOffForBounds)+h)
 
 def preprocessImage(imageFile):
 	imageData = cv2.imread(imageFile, 0)
@@ -374,7 +395,7 @@ if __name__ == '__main__':
 		
 		
 		# ------------- Second Image -----------------
-		generator = DCMGenerator(False)
+		generator = DCMGenerator(False, None, False)
 		input,output = generator.generateImagesForPatient(patientID)
 	
 		for i in range(0,len(output)):
@@ -434,7 +455,7 @@ if __name__ == '__main__':
 		boxes = []
 		for otherPatient in allPatients:
 			if patient[kPatientID] == otherPatient[kPatientID]:
-				boxes.append(minMaxCroppedBoxForPatient(otherPatient))
+				boxes.append(minMaxCroppedBoxForPatient(otherPatient, 0, 0))
 		
 		colorCroppedDcmImage = Image.fromarray(croppedImage * 255.0).convert("RGB")
 		draw = ImageDraw.Draw(colorCroppedDcmImage)

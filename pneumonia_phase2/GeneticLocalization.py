@@ -4,6 +4,7 @@ import numpy as np
 import random
 from PIL import Image,ImageDraw
 from GeneticAlgorithm import GeneticAlgorithm
+from numpy.random import choice
 import cv2
 
 class Organism:
@@ -67,6 +68,12 @@ class Organism:
 		self.ymin = int(prng.uniform(yminRange[0], yminRange[1]))
 		self.ymax = int(prng.uniform(ymaxRange[0], ymaxRange[1]))
 	
+	def resetAllWithWeights(self,xminList,xminWeights,yminList,yminWeights,xmaxList,xmaxWeights,ymaxList,ymaxWeights,prng):
+		self.xmin = choice(xminList, p=xminWeights)
+		self.xmax = choice(xmaxList, p=xmaxWeights)
+		self.ymin = choice(yminList, p=yminWeights)
+		self.ymax = choice(ymaxList, p=ymaxWeights)
+	
 	def validate(self):
 		if self.xmax < self.xmin:
 			t = self.xmin
@@ -104,14 +111,26 @@ class GeneticLocalization:
 	# opencv getPerspectiveTransform converts the crop to image sized for predicting against the model
 	# the prediction against the model is used at the fitness score for the genetic algorithm
 
-	def __init__(self,npImage,cnnModel,cnnModelImageSize):
+	def __init__(self,npImage,cnnModel,cnnModelImageSize,weightedRandoms):
 		self.npImage = npImage
 		self.cnnModel = cnnModel
 		self.cnnModelImageSize = cnnModelImageSize
+		self.weightedRandoms = weightedRandoms
 		
 		self.ga = GeneticAlgorithm()
 		self.ga.numberOfOrganisms = 2048
 		
+		if self.weightedRandoms is not None:
+			print("using statistics to seed population")
+			self.xminList = weightedRandoms["xmin"][0]
+			self.xminWeights = weightedRandoms["xmin"][1]
+			self.yminList = weightedRandoms["ymin"][0]
+			self.yminWeights = weightedRandoms["ymin"][1]
+			self.xmaxList = weightedRandoms["xmax"][0]
+			self.xmaxWeights = weightedRandoms["xmax"][1]
+			self.ymaxList = weightedRandoms["ymax"][0]
+			self.ymaxWeights = weightedRandoms["ymax"][1]
+				
 		def generateOrganism (idx,prng):
 			o = Organism (1024,1024)
 			o.randomizeAll (prng)
@@ -138,7 +157,10 @@ class GeneticLocalization:
 				elif r == 2:
 					child.randomizeAll(prng)
 				elif r == 3:
-					child.resetAll(prng)
+					if self.weightedRandoms is not None:
+						child.resetAllWithWeights(self.xminList,self.xminWeights,self.yminList,self.yminWeights,self.xmaxList,self.xmaxWeights,self.ymaxList,self.ymaxWeights,prng)
+					else:
+						child.resetAll(prng)
 					
 			child.validate()
 		self.ga.breedOrganisms = breedOrganisms
@@ -146,9 +168,15 @@ class GeneticLocalization:
 		def resetOrganisms(organisms, prng):
 			# seed half of the population with statistically relevent boxes
 			num = len(organisms) // 4
-			for i in range(0, num*2):
-				organisms[i].resetAll(prng)
-				organisms[i].validate ()
+			
+			if self.weightedRandoms is not None:
+				for i in range(0, num*2):
+					organisms[i].resetAllWithWeights (self.xminList,self.xminWeights,self.yminList,self.yminWeights,self.xmaxList,self.xmaxWeights,self.ymaxList,self.ymaxWeights,prng)
+					organisms[i].validate ()
+			else:
+				for i in range(0, num*2):
+					organisms[i].resetAll (prng)
+					organisms[i].validate ()
 			
 			for i in range(num*2, num*3):
 				organisms[i].randomizeAll (prng)
