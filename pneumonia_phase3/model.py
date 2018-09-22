@@ -17,7 +17,7 @@ IMG_SUBDIVIDE = 80
 def doesModelExist():
 	return os.path.isfile(MODEL_H5_NAME)
 
-def createModel(stage, loadFromDisk):
+def createModel(loadFromDisk):
 
 	model = Sequential()
 
@@ -46,14 +46,9 @@ def createModel(stage, loadFromDisk):
 	model.add(Dense(IMG_SUBDIVIDE+IMG_SUBDIVIDE))
 	model.add(Activation('sigmoid'))
 	
-	if stage == 1:
-		model.compile(loss='binary_crossentropy',
-					optimizer="adadelta",
-					metrics=['accuracy'])
-	else:
-		model.compile(loss='binary_crossentropy',
-					optimizer=optimizers.SGD(lr=1e-4, momentum=0.9),
-					metrics=['accuracy'])
+	model.compile(loss='binary_crossentropy',
+				optimizer="rmsprop",
+				metrics=['accuracy'])
 
 	print(model.summary())
 	

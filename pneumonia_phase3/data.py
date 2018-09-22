@@ -352,7 +352,7 @@ if __name__ == '__main__':
 	mode = "unknown"
 	
 	if len(sys.argv) >= 2:
-		if sys.argv[1] in ["preprocess", "generator_test", "box_test"]:
+		if sys.argv[1] in ["preprocess", "generator_test", "crop_test", "box_test"]:
 			mode = sys.argv[1]
 	
 	if mode == "unknown":
@@ -369,14 +369,22 @@ if __name__ == '__main__':
 		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
 		    pool.map(preprocessImage, allImages)
 		    pool.terminate()
-		
 	
 	if mode == "generator_test":
+		generator = DCMGenerator(False, None, False)
+	
+		input,output,patientIds = generator.generateImages(1, 1.0)
+		
+		print("patientIds", patientIds)
+		print("input", input)
+		print("output", output)
+	
+	if mode == "crop_test":
 		# show two images
 		# one image is the normal size training image with boxes on it
 		# second image is training size image with boxes on it, the boxes calculated from the output
 		
-		patientID = "34858b4b-37ff-4130-be8f-7075f3f3b056"
+		patientID = "49b95513-daab-49bb-bc6e-c5254ab1bc07"
 		
 		# ------------- First Image -----------------
 		allPatients = GetPhase3PatientInfo()

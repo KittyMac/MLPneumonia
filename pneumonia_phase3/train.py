@@ -67,7 +67,7 @@ def Learn1():
 	
 	# 1. create the model
 	print("creating the model")
-	_model = model.createModel(1, True)
+	_model = model.createModel(True)
 	
 	# 2. train the model
 	print("initializing the generator")
@@ -82,7 +82,7 @@ def Learn1():
 	_model.save(model.MODEL_H5_NAME)
 
 def Train(generator,_model,n,epocs):
-	checkpoint = ModelCheckpoint(model.MODEL_H5_NAME, monitor='acc', verbose=0, save_best_only=True, mode='max')
+	checkpoint = ModelCheckpoint(model.MODEL_H5_NAME, monitor='loss', verbose=0, save_best_only=True, mode='min')
 	train,label,patientIds = generator.generateImages(n, 0.5)
 	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1,callbacks=[checkpoint])
 
@@ -92,7 +92,7 @@ def Learn2():
 		
 	# 1. create the model
 	print("creating the model")
-	_model = model.createModel(1, True)
+	_model = model.createModel(True)
 
 	# 2. train the model
 	print("initializing the generator")
@@ -124,7 +124,7 @@ def Learn2():
 
 
 def Test(patientID):
-	_model = model.createModel(True, False)
+	_model = model.createModel(True)
 	
 	generator = data.DCMGenerator(False, None, False)
 	
@@ -157,7 +157,7 @@ def Test(patientID):
 
 '''
 def GenerateSubmission():
-	_model = model.createModel(True, False)
+	_model = model.createModel(True)
 	
 	print("loading submission images")
 	generator = data.DCMGenerator("data/stage_1_test_images", None)
@@ -190,18 +190,11 @@ if __name__ == '__main__':
 	mode = "unknown"
 	
 	if len(sys.argv) >= 2:
-		if sys.argv[1] in ["learn", "learn1", "learn2", "test"]:
+		if sys.argv[1] in ["learn", "test"]:
 			mode = sys.argv[1]
 		
 	if mode == "learn":
 		Learn1()
-		Learn2()
-	
-	if mode == "learn1":
-		Learn1()
-	
-	if mode == "learn2":
-		Learn2()
 	
 	if mode == "test":
 		if len(sys.argv) >= 3:
