@@ -19,6 +19,7 @@ import random
 import time
 import sys
 import math
+import os
 
 import signal
 import time
@@ -76,50 +77,32 @@ def Learn1():
 	# number of images to generate
 	n = 5000
 	
-	# train hard for a long time on this sample set
-	Train(generator,_model,n,100)
-	
-	_model.save(model.MODEL_H5_NAME)
-
-def Train(generator,_model,n,epocs):
-	checkpoint = ModelCheckpoint(model.MODEL_H5_NAME, monitor='loss', verbose=0, save_best_only=True, mode='min')
-	train,label,patientIds = generator.generateImages(n, 0.5)
-	_model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1,callbacks=[checkpoint])
-
-# Load smaller chunks of samples to maximize data augmentation. Use an SGD with a low
-# weight so we can "fine tune" into the data augmentation
-def Learn2():
-		
-	# 1. create the model
-	print("creating the model")
-	_model = model.createModel(True)
-
-	# 2. train the model
-	print("initializing the generator")
-	generator = data.DCMGenerator(False, validationSamples, False)
-	
-	iterations = 1000000
-		
-	print("beginning training")	
-	handler = SignalHandler()
-	i = 0
+	# Keep re-training on new sets, so we cycle in random non-pneumonia cases
+	bestLoss = 99999999999
 	while True:
-		
-		if handler.stop_processing:
-			break
-		
-		n = 5000
-		print(i)
-		Train(generator,_model,n,1)
-		i += n
-		
-		if i >= iterations:
-			break
+		bestLoss = Train(generator,_model,n,5,bestLoss)
 	
 	_model.save(model.MODEL_H5_NAME)
 
-
-
+def Train(generator,_model,n,epocs,bestLoss):
+	checkpoint = ModelCheckpoint("pneumonia.temp", monitor='loss', verbose=0, save_best_only=True, mode='min')
+	train,label,patientIds = generator.generateImages(n, 0.8)
+	history = _model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1,callbacks=[checkpoint])
+	
+	# ModelCheckpoint only works per call to model.fit, so we have it save the model to
+	# a temp file. Then we walk through the history and see if the loss is better than
+	# our best loss so far.
+	shouldCopyModel = False
+	for loss in history.history["loss"]:
+		if loss < bestLoss:
+			bestLoss = loss
+			shouldCopyModel = True
+	
+	if shouldCopyModel:
+		print("saved best loss", bestLoss)
+		os.rename("pneumonia.temp", model.MODEL_H5_NAME)
+	
+	return bestLoss
 
 
 
