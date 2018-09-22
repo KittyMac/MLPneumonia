@@ -118,7 +118,7 @@ class GeneticLocalization:
 		self.weightedRandoms = weightedRandoms
 		
 		self.ga = GeneticAlgorithm()
-		self.ga.numberOfOrganisms = 2048
+		self.ga.numberOfOrganisms = 1024
 		
 		if self.weightedRandoms is not None:
 			print("using statistics to seed population")
