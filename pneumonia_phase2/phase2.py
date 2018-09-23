@@ -276,12 +276,15 @@ if __name__ == '__main__':
 			
 			if onlyThisPatientId == None:
 				# normal operation, check if patient has been processed before. if so, don't process
+				patientAlreadyExists = False
 				for otherPatient in phase3Patients:
 					if otherPatient[kPatientID] == patient[kPatientID]:
-						continue
+						patientAlreadyExists = True
+						break
 				
 				# otherwise, we haven't done this patient before so we need to process him
-				allSubmissionPatients.append(patient)
+				if patientAlreadyExists == False:
+					allSubmissionPatients.append(patient)
 			else:
 				# special operation, we want to do onlyThisPatientId regardless if we've done him before
 				if onlyThisPatientId == patient[kPatientID]:
@@ -311,13 +314,14 @@ if __name__ == '__main__':
 			patient.append(box[3] - box[1])
 			
 			phase3Patients.append(patient)
-		
-		with open(phase3SubmissionPatientsPath(), mode='w') as patientFile:
-			patientWriter = csv.writer(patientFile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 			
-			patientWriter.writerow(['patientId', 'x', 'y', 'width', 'height', "Target", "cropX", "cropY", "cropWith", "cropHeight"])
-			for patient in phase3Patients:
-				patientWriter.writerow(patient)
+			# save the .csv file after every patient just in case we don't finish processing
+			with open(phase3SubmissionPatientsPath(), mode='w') as patientFile:
+				patientWriter = csv.writer(patientFile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+			
+				patientWriter.writerow(['patientId', 'x', 'y', 'width', 'height', "Target", "cropX", "cropY", "cropWith", "cropHeight"])
+				for patient in phase3Patients:
+					patientWriter.writerow(patient)
 		
 	if mode == "prepare3":
 		# prepare a new repopsitory of data for stage3 training.

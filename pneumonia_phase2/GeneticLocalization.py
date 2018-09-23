@@ -200,7 +200,7 @@ class GeneticLocalization:
 				print(self.npImage.shape)
 				print(organism.crop(self.npImage))
 				print("exception when scoring organism: ", organism)
-				return 0.0
+				exit(1)
 		self.ga.scoreOrganism = scoreOrganism
 		
 		def chosenOrganism(organism, score, generation, sharedOrganismIdx, prng):
