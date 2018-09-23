@@ -10,16 +10,6 @@ from multiprocessing import Process
 import sys
 import os
 
-class GracefulKiller:
-	kill_now = False
-	def __init__(self):
-		signal.signal(signal.SIGINT, self.exit_gracefully)
-		signal.signal(signal.SIGTERM, self.exit_gracefully)
-		signal.signal(signal.SIGUSR1, self.exit_gracefully)
-
-	def exit_gracefully(self,signum, frame):
-		self.kill_now = True
-
 class GeneticAlgorithm:
 	
 	prng = random
@@ -79,9 +69,7 @@ class GeneticAlgorithm:
 	
 	#@profile
 	def _PerformGenetics (self, millisecondsToProcess, patience, generateOrganism, resetOrganisms, breedOrganisms, scoreOrganism, hashOrganism, chosenOrganism, sharedOrganismIdx=-1, neighborOrganismIdx=-1):
-		
-		killer = GracefulKiller()
-		
+				
 		localPRNG = self.prng
 		
 		scoreLUT = {}
@@ -145,7 +133,7 @@ class GeneticAlgorithm:
 			localEaseOutExpo = self.easeOutExpo
 			localEaseInExpo = self.easeInExpo
 			
-			while (killer.kill_now == False and ((time.time() - watchStart) * 1000) < millisecondsToProcess and patienceCount < patience):
+			while ( ((time.time() - watchStart) * 1000) < millisecondsToProcess and patienceCount < patience):
 				
 				# optimization: we only call chosen organsism below when the new best organism changes
 				didFindNewBestOrganism = False
