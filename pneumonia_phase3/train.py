@@ -44,6 +44,10 @@ class SignalHandler:
 
 
 validationSamples = [
+	"8daf7359-53ce-4607-9257-1d7e70ff1801",
+	"4c05690d-628a-4ac5-8a41-6ee4e97a2663",
+	"7b7ca7c2-9b4f-4370-9388-7ad0b2cdda63",
+	
 	"a6236ddd-6367-4569-b5f1-07d2df9390ad",
 	"3cbd12c8-6302-43b1-a28c-fcc892540c2e",
 	"359355a8-5981-406a-a8c3-3dcfdde9169e",

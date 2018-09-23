@@ -35,6 +35,17 @@ kMaxImageOffset = 4
 
 kThreshold = 0.5
 
+def adjustImageLevels(imageData):
+	minV = np.amin(imageData)
+	maxV = np.amax(imageData)
+	
+	# The xrays have full white text on them sometimes, so we need to cap to something reasonable or they
+	# throw the auto levels all out of wack
+	maxV = min(0.8,maxV)
+	
+	scale = 1.0 / (maxV - minV)
+	return np.clip( (imageData - minV) * scale, 0.0, 1.0)
+
 class DCMGenerator():
 	
 	def __init__(self,finalSubmission,validationSamples,shouldAugment):
@@ -217,10 +228,26 @@ class DCMGenerator():
 		return 0
 	
 	
+	def smoothPeaksForAxis(self,output):
+		# try and identify boxes which should be one box but were identified as two
+		IMG_SUBDIVIDE = int(len(output))
+		
+		smoothed = np.zeros((IMG_SUBDIVIDE), dtype='float32')
+		for x in range(0,IMG_SUBDIVIDE-2):
+			x0 = output[x-1]
+			x1 = output[x]
+			x2 = output[x+1]
+			
+			smoothed[x] = output[x]
+			
+			if x0 >= kThreshold and x1 < kThreshold and x2 >= kThreshold:
+				smoothed[x] = (x0 + x2) / 2
+		
+		return smoothed
+		
+	
 	def identifyPeaksForAxis(self,output):
 		IMG_SUBDIVIDE = int(len(output))
-		xdelta = 1.0 / IMG_SUBDIVIDE
-		ydelta = 1.0 / IMG_SUBDIVIDE
 		
 		peak_indentity = np.zeros((IMG_SUBDIVIDE), dtype='float32')
 		minPeakSize = 3
@@ -228,7 +255,6 @@ class DCMGenerator():
 		peakIdx = 0
 		x = 0
 		while x < IMG_SUBDIVIDE:
-			xValue = (x*xdelta)
 			
 			# step forward until we find the first peak
 			if output[x] >= kThreshold:
@@ -260,6 +286,9 @@ class DCMGenerator():
 		
 		x_output = output[0:IMG_SUBDIVIDE]
 		y_output = output[IMG_SUBDIVIDE:]
+		
+		x_output = self.smoothPeaksForAxis(x_output)
+		y_output = self.smoothPeaksForAxis(y_output)
 		
 		x_peaks,num_x_peaks = self.identifyPeaksForAxis(x_output)
 		y_peaks,num_y_peaks = self.identifyPeaksForAxis(y_output)
@@ -302,7 +331,7 @@ class DCMGenerator():
 			
 			# only boxes with decent width or height are counted
 			box = (int(xmin*size[1]),int(ymin*size[0]),int(xmax*size[1]),int(ymax*size[0]))
-			if box[2] - box[0] > 10 and box[3] - box[1] > 10:
+			if box[2] - box[0] > 20 and box[3] - box[1] > 20:
 				boxes.append(box)
 				
 		return boxes
@@ -339,6 +368,7 @@ def minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds):
 def preprocessImage(imageFile):
 	imageData = cv2.imread(imageFile, 0)
 	imageData = imageData.astype('float32') / 255
+	imageData = adjustImageLevels(imageData)
 	imageData = cv2.resize(imageData, (IMG_SIZE[0],IMG_SIZE[1])).reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2])
 	outputPath = imageFile[:-4]
 	print("caching image: %s" % outputPath)
