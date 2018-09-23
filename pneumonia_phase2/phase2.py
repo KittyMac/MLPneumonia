@@ -37,16 +37,23 @@ import cv2
 interactiveMode = True
 cnnModel = None
 
+# TODO: detect when an xray is inverted and fix
+def FixInvertedImage(dcmImage, patient):
+	if patient[kPatientID] == "037e120a-24fa-4f9c-8813-111136e3c288":
+		print("Detected inverted xray, fixing...")
+		dcmImage = np.ones(dcmImage.shape) - dcmImage
+	return dcmImage
 
-def AdjustPatientImage(patient, weightedRandoms):
+def AdjustPatientImage(dcmFilePath, patient, weightedRandoms):
 	
 	keras.clear_session()
 	
 	cnnModel = model.createModel(True)
 	
-	dcmFilePath = dcmFilePathForTrainingPatient(patient)
 	dcmData = pydicom.read_file(dcmFilePath)
 	dcmImage = dcmData.pixel_array.astype('float32') / 255
+	
+	dcmImage = FixInvertedImage(dcmImage, patient)
 	
 	print("adjusting image at:", dcmFilePath)	
 	gl = GeneticLocalization(dcmImage,cnnModel,(IMG_SIZE[0],IMG_SIZE[1]),weightedRandoms)
@@ -63,6 +70,9 @@ def AdjustPatientImage(patient, weightedRandoms):
 	
 	return dcmImage,dcmImage,sourceImg,box
 
+
+def phase3SubmissionPatientsPath():
+	return "../pneumonia_phase3/stage_1_test_images.csv"
 
 def phase3PatientsPath():
 	return "../pneumonia_phase3/stage_1_train_images.csv"
@@ -100,6 +110,15 @@ def GetExistingPhase3PatientInfo():
 		patientInfo = list(csv.reader(csv_file))
 		patientInfo.pop(0)
 	return patientInfo
+
+def GetExistingPhase3SubmissionPatientInfo():
+	patientInfo = []
+	try:
+		with open(phase3SubmissionPatientsPath()) as csv_file:
+			patientInfo = list(csv.reader(csv_file))
+			patientInfo.pop(0)
+	finally:
+		return patientInfo
 
 def GetPatientByID(patientID, allPatients):
 	patientEntries = []
@@ -186,14 +205,14 @@ def GetBoundingBoxWeightedArrays():
 	weightedRandoms["ymax"] = (ymaxListNP, ymaxWeightsNP)
 	
 	return weightedRandoms
-	
+
 
 if __name__ == '__main__':
 	
 	mode = "unknown"
 	
 	if len(sys.argv) >= 2:
-		if sys.argv[1] in ["one", "all", "hot", "prepare3", "reset3"]:
+		if sys.argv[1] in ["one", "all", "hot", "prepare3", "submission3", "submissionOne", "reset3"]:
 			mode = sys.argv[1]
 	
 	
@@ -212,7 +231,93 @@ if __name__ == '__main__':
 		with open(phase3PatientsPath(), mode='w') as patientFile:
 			patientWriter = csv.writer(patientFile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
 			patientWriter.writerow(['patientId', 'x', 'y', 'width', 'height', "Target", "cropX", "cropY", "cropWith", "cropHeight"])
+	
+	
+	if mode == "submissionOne" and len(sys.argv) >= 3:
+		patientID = sys.argv[2]
+		patient = [patientID, 0, 0, 0, 0, 0]
 		
+		fullImage,croppedImage,boxImage,box = AdjustPatientImage(dcmFilePathForTestingPatient(patient), patient, weightedRandoms)
+		if box == None:
+			print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
+			fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
+			fullImagePIL.save(phase1DataManualFixPath(patient))
+			exit(0)
+		
+		croppedImagePIL = Image.fromarray(croppedImage * 255).convert("RGB")
+		fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
+		
+		boxImage.show()
+		
+		good = raw_input("Good? (Y)es/(N)o/(S)kip:")
+		if good.lower() != "s":
+			path = phase1DataTrainingPath(patient, good.lower() == "y")
+			croppedImagePIL.save(path)
+			print("saved to " + path)
+		
+			if good.lower() == "n":
+				fullImagePIL.save(phase1DataManualFixPath(patient))
+		
+		exit(0)
+	
+	if mode == "submission3":
+		# this is the same as prepare3, but processes the competition test set
+		phase3Patients = GetExistingPhase3SubmissionPatientInfo()
+		allSubmissionPatients = []
+		allFiles = glob.glob("../data/stage_1_test_images/*.dcm")
+		
+		onlyThisPatientId = None
+		if len(sys.argv) >= 3:
+			onlyThisPatientId = sys.argv[2]
+		
+		# 1. create fake patient information
+		for file in allFiles:
+			patient = [os.path.splitext(os.path.basename(file))[0], 0, 0, 0, 0, 0]
+			
+			if onlyThisPatientId == None:
+				# normal operation, check if patient has been processed before. if so, don't process
+				for otherPatient in phase3Patients:
+					if otherPatient[kPatientID] == patient[kPatientID]:
+						continue
+				
+				# otherwise, we haven't done this patient before so we need to process him
+				allSubmissionPatients.append(patient)
+			else:
+				# special operation, we want to do onlyThisPatientId regardless if we've done him before
+				if onlyThisPatientId == patient[kPatientID]:
+					# remove all previous mentions of this patient, then add them
+					for otherPatient in phase3Patients[:]:
+						if onlyThisPatientId == otherPatient[kPatientID]:
+							phase3Patients.remove(otherPatient)
+					allSubmissionPatients.append(patient)
+		
+		# 2. process the patients
+		print("%d submission patients to process for phase 3" % (len(allSubmissionPatients)))
+		
+		for patient in allSubmissionPatients:			
+			fullImage,croppedImage,boxImage,box = AdjustPatientImage(dcmFilePathForTestingPatient(patient), patient, weightedRandoms)
+			if box == None:
+				print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
+				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
+				fullImagePIL.save(phase1DataManualFixPath(patient))
+				continue
+			
+			croppedImagePIL = Image.fromarray(croppedImage * 255).convert("RGB")
+			croppedImagePIL.save(phase3TestingPath(patient))
+			
+			patient.append(box[0])
+			patient.append(box[1])
+			patient.append(box[2] - box[0])
+			patient.append(box[3] - box[1])
+			
+			phase3Patients.append(patient)
+		
+		with open(phase3SubmissionPatientsPath(), mode='w') as patientFile:
+			patientWriter = csv.writer(patientFile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+			
+			patientWriter.writerow(['patientId', 'x', 'y', 'width', 'height', "Target", "cropX", "cropY", "cropWith", "cropHeight"])
+			for patient in phase3Patients:
+				patientWriter.writerow(patient)
 		
 	if mode == "prepare3":
 		# prepare a new repopsitory of data for stage3 training.
@@ -278,7 +383,7 @@ if __name__ == '__main__':
 			
 			patientEntries = GetPatientByID(patientId, allPatients)
 			
-			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patientEntries[0], weightedRandoms)
+			fullImage,croppedImage,boxImage,box = AdjustPatientImage(dcmFilePathForTrainingPatient(patientEntries[0]), patientEntries[0], weightedRandoms)
 			if box == None:
 				print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
 				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
@@ -309,7 +414,7 @@ if __name__ == '__main__':
 		patientID = sys.argv[2]
 		for patient in allPatients:
 			if patient[kPatientID] == patientID:
-				fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient, weightedRandoms)
+				fullImage,croppedImage,boxImage,box = AdjustPatientImage(dcmFilePathForTrainingPatient(patient), patient, weightedRandoms)
 				if box == None:
 					print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
 					fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
@@ -335,7 +440,7 @@ if __name__ == '__main__':
 	if mode == "hot":
 		while True:
 			patient = random.choice(allPatients)
-			fullImage,croppedImage,boxImage,box = AdjustPatientImage(patient, weightedRandoms)
+			fullImage,croppedImage,boxImage,box = AdjustPatientImage(dcmFilePathForTrainingPatient(patient), patient, weightedRandoms)
 			if box == None:
 				print("ERROR: unable to detect lungs for patient. Saving image to phase 1 manual training...", patient[kPatientID])
 				fullImagePIL = Image.fromarray(fullImage * 255).convert("RGB")
@@ -368,6 +473,6 @@ if __name__ == '__main__':
 	
 	if mode == "all":
 		for patient in allPatients:
-			AdjustPatientImage(patient, weightedRandoms)
+			AdjustPatientImage(dcmFilePathForTrainingPatient(patient), patient, weightedRandoms)
 
 	
