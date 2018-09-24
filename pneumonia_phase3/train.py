@@ -6,6 +6,7 @@ from keras.callbacks import ModelCheckpoint
 from keras.callbacks import EarlyStopping
 from keras.callbacks import Callback
 
+import pydicom
 from keras.preprocessing import sequence
 from dateutil import parser
 import numpy as np
@@ -24,6 +25,10 @@ import os
 import signal
 import time
 import coremltools
+
+from data import kPatientID
+from data import dcmFilePathForTestingPatient
+from data import minMaxCropBoxForPatient
 
 from model import IMG_SIZE
 
@@ -111,34 +116,65 @@ def Test(patientID):
 		if len(output) == 1:
 			sourceImg.show()
 
-'''
-def GenerateSubmission():
+
+def GenerateSubmission(patientID):
 	_model = model.createModel(True)
 	
-	print("loading submission images")
-	generator = data.DCMGenerator("data/stage_1_test_images", None)
-	patients,input = generator.generatePredictionImages()
+	generator = data.DCMGenerator(True, None, False)
 	
-	print("predicting pnemonia")
-	results = _model.predict(input)
+	patientsToProcess = []
+	
+	print("loading patients")
+	if patientID is not None:
+		for patient in generator.labelsInfo:
+			if patient[kPatientID] == patientID:
+				patientsToProcess.append(patient)
+	else:
+		for patient in generator.labelsInfo:
+			patientsToProcess.append(patient)
+	
 	
 	print("writing results file")
 	outputFile = open("submission.csv", "w")
 	outputFile.write("patientId,PredictionString\n")
-	for i in range(0,len(patients)):
-		print("  ... %s" % patients[i][0])
+	
+	print( "predicting pnemonia on %d patients" % (len(patientsToProcess)) )
+	for patient in patientsToProcess:
+		print("  ... %s" % patient[kPatientID])
 		
-		# Note: for the submission, all bounds must be reckoned in 1024x1024, the size of the samples provided
-		boxes = generator.coordinatesFromOutput(results[i],(1024,1024))
-		confidence = generator.convertOutputToString(results[i])
+		input,output = generator.generateImagesForPatient(patient[kPatientID])
+	
+		results = _model.predict(input)
+		
+		boxes = generator.coordinatesFromOutput(results[0],IMG_SIZE)
+		
+		# Note: for the submission, all bounds must be reckoned in their non-cropped 1024x1024
+		confidence = generator.convertOutputToString(results[0])
 		if confidence >= 0.5:
-			outputFile.write("%s," % (patients[i][0]))
+			outputFile.write("%s," % (patient[kPatientID]))
 			for box in boxes:
-				outputFile.write("%f %d %d %d %d " % (confidence,box[0],box[1],box[2]-box[0],box[3]-box[1]))
+				adjustedBox = generator.convertBoxToSubmissionSize(patient, box)
+				outputFile.write("%f %d %d %d %d " % (confidence,int(adjustedBox[0]),int(adjustedBox[1]),int(adjustedBox[2]-adjustedBox[0]),int(adjustedBox[3]-adjustedBox[1])))
+					
+			if patientID is not None:
+				# if we're only doing one patient, let's visually view the results to confirm they make sense
+				dcmData = pydicom.read_file(dcmFilePathForTestingPatient(patient))
+				sourceImg = Image.fromarray(dcmData.pixel_array.reshape(1024,1024)).convert("RGB")
+						
+				draw = ImageDraw.Draw(sourceImg)
+				
+				cropBox = minMaxCropBoxForPatient(patient)
+				draw.rectangle(cropBox, outline="yellow")
+				
+				for box in boxes:
+					adjustedBox = generator.convertBoxToSubmissionSize(patient, box)
+					draw.rectangle(adjustedBox, outline="red")
+				sourceImg.show()
+			
 			outputFile.write("\n")
 		else:
-			outputFile.write("%s,\n" % patients[i][0])
-'''
+			outputFile.write("%s,\n" % patient[kPatientID])
+
 
 
 if __name__ == '__main__':
@@ -146,11 +182,17 @@ if __name__ == '__main__':
 	mode = "unknown"
 	
 	if len(sys.argv) >= 2:
-		if sys.argv[1] in ["learn", "test"]:
+		if sys.argv[1] in ["learn", "test", "submit"]:
 			mode = sys.argv[1]
 		
 	if mode == "learn":
 		Learn1()
+	
+	if mode == "submit":
+		if len(sys.argv) >= 3:
+			GenerateSubmission(sys.argv[2])
+		else:
+			GenerateSubmission(None)
 	
 	if mode == "test":
 		if len(sys.argv) >= 3:

@@ -52,11 +52,7 @@ class DCMGenerator():
 		self.shouldAugment = shouldAugment
 		if finalSubmission == True:
 			self.directory = "stage_1_test_images/"
-			self.labelsInfo = []
-			allFiles = glob.glob("stage_1_train_images/*.npy")
-			for file in allFiles:
-				patient = [os.path.splitext(file)[0], 0, 0, 0, 0, 0, 0, 0, 0, 0]
-				self.labelsInfo.append(patient)
+			self.labelsInfo = GetPhase3SubmissionPatientInfo()
 		else:
 			self.directory = "stage_1_train_images/"
 			self.labelsInfo = GetPhase3PatientInfo()
@@ -163,6 +159,9 @@ class DCMGenerator():
 			if patient[kPatientID] == patientID:
 				localPatientInfo.append(patient)
 
+		if len(localPatientInfo) == 0:
+			print("ERROR: unable to find patient info for %s" % (patientID))
+			return None
 		
 		input = np.zeros((1,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
 		output = np.zeros((1,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
@@ -277,6 +276,29 @@ class DCMGenerator():
 			x += 1
 		return peak_indentity,peakIdx
 	
+	def convertBoxToSubmissionSize(self,patient,box):
+		# box is currently in IMG_SIZE size, we need to:
+		# 1. scale them up to the patient's crop size 
+		# 2. move them over to adjust for the crop offset
+		cropBox = minMaxCropBoxForPatient(patient)
+		
+		scaleX = (cropBox[2] - cropBox[0]) / IMG_SIZE[0]
+		scaleY = (cropBox[3] - cropBox[1]) / IMG_SIZE[0]
+		
+		localBox = [box[0], box[1], box[2], box[3]]
+		localBox[0] *= scaleX
+		localBox[1] *= scaleY
+		localBox[2] *= scaleX
+		localBox[3] *= scaleY
+		
+		localBox[0] += cropBox[0]
+		localBox[1] += cropBox[1]
+		localBox[2] += cropBox[0]
+		localBox[3] += cropBox[1]
+		
+		return localBox
+		
+	
 	def coordinatesFromOutput(self,output,size):
 		# 1. run through X and Y outputs and identify peaks (0 for not in peak, increasing numeral of different peak)
 		# 2. run through X and Y output values, and identify new bounds based on peak index
@@ -343,11 +365,25 @@ def GetPhase3PatientInfo():
 		patientInfo.pop(0)
 	return patientInfo
 
+def GetPhase3SubmissionPatientInfo():
+	patientInfo = []
+	with open("stage_1_test_images.csv") as csv_file:
+		patientInfo = list(csv.reader(csv_file))
+		patientInfo.pop(0)
+	return patientInfo
+
 def dcmFilePathForTrainingPatient(patient):
 	return "../data/stage_1_train_images/%s.dcm" % (patient[kPatientID])
 
 def dcmFilePathForTestingPatient(patient):
 	return "../data/stage_1_test_images/%s.dcm" % (patient[kPatientID])
+
+def minMaxCropBoxForPatient(patient):
+	x = float(patient[kCropX])
+	y = float(patient[kCropY])
+	w = float(patient[kCropWidth])
+	h = float(patient[kCropHeight])
+	return [x,y,x+w,y+h]
 
 def minMaxBoxForPatient(patient):
 	x = float(patient[kBoundsX])
@@ -389,6 +425,17 @@ if __name__ == '__main__':
 		print("mode not recognized")
 	
 	if mode == "preprocess":
+		# remove all existing npy cache files
+		allCaches = glob.glob("stage_1_test_images/*.npy")
+		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
+		    pool.map(deleteFile, allCaches)
+		    pool.terminate()
+		# convert all png images to npy and save them
+		allImages = glob.glob("stage_1_test_images/*.png")
+		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
+		    pool.map(preprocessImage, allImages)
+		    pool.terminate()
+		
 		# remove all existing npy cache files
 		allCaches = glob.glob("stage_1_train_images/*.npy")
 		with closing(Pool(processes=multiprocessing.cpu_count()//2)) as pool:
@@ -492,11 +539,7 @@ if __name__ == '__main__':
 		colorDcmImage.show()
 		
 		# create the cropped image
-		cropBox = [patient[kCropX],
-			patient[kCropY],
-			patient[kCropX] + patient[kCropWidth],
-			patient[kCropY] + patient[kCropHeight]
-		]
+		cropBox = minMaxCropBoxForPatient(patient)
 		croppedImage = dcmImage[int(cropBox[1]):int(cropBox[3]),int(cropBox[0]):int(cropBox[2])]
 		
 		# find all of the cropped pneumonia boxes for this patient
