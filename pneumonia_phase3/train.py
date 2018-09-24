@@ -29,20 +29,6 @@ from model import IMG_SIZE
 
 from PIL import Image,ImageDraw
 
-######
-# allows us to used ctrl-c to end gracefully instead of just dying
-######
-class SignalHandler:
-  stop_processing = False
-  def __init__(self):
-    signal.signal(signal.SIGINT, self.exit_gracefully)
-    signal.signal(signal.SIGTERM, self.exit_gracefully)
-
-  def exit_gracefully(self,signum, frame):
-    self.stop_processing = True
-######
-
-
 validationSamples = [
 	"8daf7359-53ce-4607-9257-1d7e70ff1801",
 	"4c05690d-628a-4ac5-8a41-6ee4e97a2663",
@@ -82,32 +68,15 @@ def Learn1():
 	n = 5000
 	
 	# Keep re-training on new sets, so we cycle in random non-pneumonia cases
-	bestLoss = 99999999999
+	checkpoint = ModelCheckpoint(model.MODEL_H5_NAME, monitor='loss', verbose=0, save_best_only=True, mode='min')
 	while True:
-		bestLoss = Train(generator,_model,n,5,bestLoss)
+		Train(generator,_model,n,5,checkpoint)
 	
 	_model.save(model.MODEL_H5_NAME)
 
-def Train(generator,_model,n,epocs,bestLoss):
-	checkpoint = ModelCheckpoint("pneumonia.temp", monitor='loss', verbose=0, save_best_only=True, mode='min')
+def Train(generator,_model,n,epocs,checkpoint):
 	train,label,patientIds = generator.generateImages(n, 0.8)
 	history = _model.fit(train,label,batch_size=128,shuffle=True,epochs=epocs,verbose=1,callbacks=[checkpoint])
-	
-	# ModelCheckpoint only works per call to model.fit, so we have it save the model to
-	# a temp file. Then we walk through the history and see if the loss is better than
-	# our best loss so far.
-	shouldCopyModel = False
-	for loss in history.history["loss"]:
-		if loss < bestLoss:
-			bestLoss = loss
-			shouldCopyModel = True
-	
-	if shouldCopyModel:
-		print("saved best loss", bestLoss)
-		os.rename("pneumonia.temp", model.MODEL_H5_NAME)
-	
-	return bestLoss
-
 
 
 def Test(patientID):
