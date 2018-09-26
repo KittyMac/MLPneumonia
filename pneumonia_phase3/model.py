@@ -10,7 +10,7 @@ from keras.optimizers import SGD
 import os
 
 MODEL_H5_NAME = "pneumonia.h5"
-IMG_SIZE = [160,160,1]
+IMG_SIZE = [320,320,1]
 IMG_SUBDIVIDE = 80
 
 
@@ -36,14 +36,12 @@ def createModel(loadFromDisk):
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
 	
-	#model.add(Conv2D(256, (3, 3)))
-	#model.add(Activation('relu'))
-	#model.add(MaxPooling2D(pool_size=(2, 2)))
+	model.add(Conv2D(256, (3, 3)))
+	model.add(Activation('relu'))
+	model.add(MaxPooling2D(pool_size=(2, 2)))
 	
 	model.add(Flatten())
-	model.add(Dense(1024))
 	model.add(Dense(512))
-	model.add(Dense(256))
 	model.add(Activation('relu'))
 	model.add(Dense(IMG_SUBDIVIDE+IMG_SUBDIVIDE))
 	model.add(Activation('sigmoid'))

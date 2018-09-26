@@ -31,7 +31,7 @@ kCropY = 7
 kCropWidth = 8
 kCropHeight = 9
 
-kMaxImageOffset = 4
+kMaxImageOffset = 100
 
 kThreshold = 0.5
 
@@ -48,19 +48,25 @@ def adjustImageLevels(imageData):
 
 class DCMGenerator():
 	
-	def __init__(self,finalSubmission,validationSamples,shouldAugment):
+	def __init__(self,finalSubmission,validationSamples,ignoreSamples,shouldAugment):
 		self.shouldAugment = shouldAugment
 		if finalSubmission == True:
 			self.directory = "stage_1_test_images/"
 			self.labelsInfo = GetPhase3SubmissionPatientInfo()
+			self.validationInfo = []
 		else:
 			self.directory = "stage_1_train_images/"
 			self.labelsInfo = GetPhase3PatientInfo()
+			self.validationInfo = []
 			if validationSamples is not None:
 				for patient in self.labelsInfo[:]:
+					if patient[kPatientID] in ignoreSamples:
+						print("ignoring patient: %s" % (patient[kPatientID]))
+						self.labelsInfo.remove(patient)
 					if patient[kPatientID] in validationSamples:
 						print("removing patient for validation: %s" % (patient[kPatientID]))
 						self.labelsInfo.remove(patient)
+						self.validationInfo.append(patient)
 	
 	def numberOfSamples(self):
 		return len(self.labelsInfo)
@@ -84,7 +90,28 @@ class DCMGenerator():
 			print("preprocessed file does not exist: ", imageFilePath)
 		
 		exit(1)
+	
+	def validationImages(self):
 		
+		patientIds = []
+		processedPatientList = []
+		
+		for patient in self.validationInfo:
+			patientIds.append(patient[kPatientID])
+			input2,output2 = self.generateImagesForPatient(patient[kPatientID], self.validationInfo)
+			processedPatientList.append( (patient, input2[0], output2[0]) )
+			
+		num = len(processedPatientList)
+		
+		input = np.zeros((num,IMG_SIZE[1],IMG_SIZE[0],IMG_SIZE[2]), dtype='float32')
+		output = np.zeros((num,IMG_SUBDIVIDE+IMG_SUBDIVIDE), dtype='float32')
+		
+		for i in range(0,len(processedPatientList)):
+			processedPatient = processedPatientList[i]
+			np.copyto(input[i], processedPatient[1])
+			np.copyto(output[i], processedPatient[2])
+		
+		return input,output,patientIds
 	
 	def generateImages(self,num,positiveSplit):
 		
@@ -133,7 +160,7 @@ class DCMGenerator():
 			
 			patientIds.append(patient[kPatientID])
 			
-			input2,output2 = self.generateImagesForPatient(patient[kPatientID])
+			input2,output2 = self.generateImagesForPatient(patient[kPatientID], self.labelsInfo)
 			
 			processedPatientList.append( (patient, input2[0], output2[0]) )
 		
@@ -151,11 +178,19 @@ class DCMGenerator():
 							
 		return input,output,patientIds
 	
-	def generateImagesForPatient(self,patientID):
+	def patientForPatientID(self,patientID):
+		for patient in self.labelsInfo:
+			if patient[kPatientID] == patientID:
+				return patient
+	
+	def generateImagesForPatient(self,patientID,localLabelInfo=None):
+		
+		if localLabelInfo is None:
+			localLabelInfo = self.labelsInfo
 		
 		localPatientInfo = []
-		for i in range(0,len(self.labelsInfo)):
-			patient = self.labelsInfo[i]
+		for i in range(0,len(localLabelInfo)):
+			patient = localLabelInfo[i]
 			if patient[kPatientID] == patientID:
 				localPatientInfo.append(patient)
 
@@ -404,7 +439,7 @@ def minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds):
 def preprocessImage(imageFile):
 	imageData = cv2.imread(imageFile, 0)
 	imageData = imageData.astype('float32') / 255
-	imageData = adjustImageLevels(imageData)
+	#imageData = adjustImageLevels(imageData)
 	imageData = cv2.resize(imageData, (IMG_SIZE[0],IMG_SIZE[1])).reshape(IMG_SIZE[0],IMG_SIZE[1],IMG_SIZE[2])
 	outputPath = imageFile[:-4]
 	print("caching image: %s" % outputPath)
@@ -491,7 +526,7 @@ if __name__ == '__main__':
 		
 		# ------------- Second Image -----------------
 		generator = DCMGenerator(False, None, False)
-		input,output = generator.generateImagesForPatient(patientID)
+		input,output = generator.generateImagesForPatient(patientID, self.labelInfo)
 	
 		for i in range(0,len(output)):
 			sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")

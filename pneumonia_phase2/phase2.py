@@ -39,7 +39,8 @@ cnnModel = None
 
 # TODO: detect when an xray is inverted and fix
 def FixInvertedImage(dcmImage, patient):
-	if patient[kPatientID] == "037e120a-24fa-4f9c-8813-111136e3c288":
+	allInvertedPatientIDs = ["74ef566d-21ce-4b66-b134-a713ca915762", "037e120a-24fa-4f9c-8813-111136e3c288"]
+	if patient[kPatientID] in allInvertedPatientIDs:
 		print("Detected inverted xray, fixing...")
 		dcmImage = np.ones(dcmImage.shape) - dcmImage
 	return dcmImage
@@ -346,6 +347,13 @@ if __name__ == '__main__':
 		
 		# load the CSV of patients we've already processed
 		phase3Patients = GetExistingPhase3PatientInfo()
+		
+		# remove any patient which does NOT have pneumonia
+		for patient in allPatients[:]:
+			if patient[kTarget] == "0":
+				allPatients.remove(patient)
+		
+		print("%d patients with pneumonia" % (len(allPatients)))
 		
 		# create a list of patientIds that we want to process.  Start by choosing
 		# unique patientIds from allPatients
