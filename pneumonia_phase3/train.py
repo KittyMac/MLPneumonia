@@ -10,7 +10,6 @@ import pydicom
 from keras.preprocessing import sequence
 from dateutil import parser
 import numpy as np
-import coremltools
 import model
 import data
 import json
@@ -24,7 +23,6 @@ import os
 
 import signal
 import time
-import coremltools
 
 from data import kPatientID
 from data import dcmFilePathForTestingPatient
