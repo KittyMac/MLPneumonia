@@ -31,7 +31,7 @@ kCropY = 7
 kCropWidth = 8
 kCropHeight = 9
 
-kMaxImageOffset = 100
+kMaxImageOffset = 32
 
 kThreshold = 0.5
 
