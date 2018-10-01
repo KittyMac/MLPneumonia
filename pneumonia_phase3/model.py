@@ -11,7 +11,7 @@ import os
 
 MODEL_H5_NAME = "pneumonia.h5"
 IMG_SIZE = [256,256,1]
-IMG_SUBDIVIDE = 80
+IMG_SUBDIVIDE = 128
 
 
 def doesModelExist():
@@ -52,7 +52,7 @@ def createModel(loadFromDisk):
 	model.add(Activation('sigmoid'))
 	
 	model.compile(loss='mse',
-				optimizer="rmsprop",
+				optimizer="adam",
 				metrics=['mse'])
 
 	print(model.summary())

@@ -76,6 +76,11 @@ class DCMGenerator():
 		imageData = np.roll(imageData, int(xOff), axis=1)
 		imageData = np.roll(imageData, int(yOff), axis=0)
 		return imageData
+	
+	def simpleFlipAugment(self,imageData):
+		# very simple horizontal flip image augmentation
+		imageData = np.flip(imageData, axis=1)
+		return imageData
 		
 	
 	def loadImageForPatientId(self,patient):
@@ -203,15 +208,19 @@ class DCMGenerator():
 		
 		localPatient = localPatientInfo[0]
 		
+		horizontalFlip = random.random() > 0.5
 		xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
 		yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
 		
-		if self.shouldAugment == False:
-			xOffForImage = 0
-			yOffForImage = 0
+		#if self.shouldAugment == False:
+		xOffForImage = 0
+		yOffForImage = 0
+		horizontalFlip = True
 
 		imageData = self.loadImageForPatientId(localPatient)
 		imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
+		if horizontalFlip:
+			imageData = self.simpleFlipAugment(imageData)
 		np.copyto(input[0], imageData)
 	
 		if localPatient[kTarget] == "1":
@@ -225,11 +234,12 @@ class DCMGenerator():
 				yOffForBounds = yOffForImage * (imgHeight / IMG_SIZE[1])
 
 				# this is the box at cropped image size & location
-				box = minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds)
+				box = minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds,horizontalFlip)
 		
 				# Note: the "full size" of the image here is the size of the cropped image
 				xdelta = (imgWidth / IMG_SUBDIVIDE)
 				ydelta = (imgHeight / IMG_SUBDIVIDE)
+
 				for x in range(0, IMG_SUBDIVIDE):
 					for y in range(0, IMG_SUBDIVIDE):
 						xValue = x * xdelta
@@ -427,14 +437,24 @@ def minMaxBoxForPatient(patient):
 	h = float(patient[kBoundsHeight])
 	return (x,y,x+w,y+h)
 	
-def minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds):
+def minMaxCroppedBoxForPatient(patient,xOffForBounds,yOffForBounds,horizontalFlip):
 	cx = float(patient[kCropX])
 	cy = float(patient[kCropY])
+	cw = float(patient[kCropWidth])
+	ch = float(patient[kCropHeight])
 	x = float(patient[kBoundsX])
 	y = float(patient[kBoundsY])
 	w = float(patient[kBoundsWidth])
 	h = float(patient[kBoundsHeight])
-	return ( (x-cx)+xOffForBounds, (y-cy)+yOffForBounds, ((x-cx)+xOffForBounds)+w, ((y-cy)+yOffForBounds)+h)
+	if horizontalFlip == False:
+		return ( (x-cx)+xOffForBounds, (y-cy)+yOffForBounds, ((x-cx)+xOffForBounds)+w, ((y-cy)+yOffForBounds)+h)
+	
+	return ( 
+		(cw - ((x-cx)+xOffForBounds)) - w,
+		(y-cy)+yOffForBounds,
+		(cw - ((x-cx)+xOffForBounds)),
+		((y-cy)+yOffForBounds)+h
+	)
 
 def preprocessImage(imageFile):
 	imageData = cv2.imread(imageFile, 0)
@@ -482,22 +502,7 @@ if __name__ == '__main__':
 		    pool.map(preprocessImage, allImages)
 		    pool.terminate()
 	
-	if mode == "generator_test":
-		generator = DCMGenerator(False, None, False)
-	
-		input,output,patientIds = generator.generateImages(1, 1.0)
-		
-		print("patientIds", patientIds)
-		print("input", input)
-		print("output", output)
-	
-	if mode == "crop_test":
-		# show two images
-		# one image is the normal size training image with boxes on it
-		# second image is training size image with boxes on it, the boxes calculated from the output
-		
-		patientID = "49b95513-daab-49bb-bc6e-c5254ab1bc07"
-		
+	def crop_test(patientID, generator):
 		# ------------- First Image -----------------
 		allPatients = GetPhase3PatientInfo()
 		patient = None
@@ -525,8 +530,7 @@ if __name__ == '__main__':
 		
 		
 		# ------------- Second Image -----------------
-		generator = DCMGenerator(False, None, False)
-		input,output = generator.generateImagesForPatient(patientID, self.labelInfo)
+		input,output = generator.generateImagesForPatient(patientID, generator.labelsInfo)
 	
 		for i in range(0,len(output)):
 			sourceImg = Image.fromarray(input[i].reshape(IMG_SIZE[0],IMG_SIZE[1]) * 255.0).convert("RGB")
@@ -538,6 +542,28 @@ if __name__ == '__main__':
 				draw.rectangle(box, outline="yellow")
 			
 			sourceImg.show()
+	
+	
+	if mode == "generator_test":
+		generator = DCMGenerator(False, None, None, True)
+	
+		input,output,patientIds = generator.generateImages(2, 1.0)
+		
+		print("patientIds", patientIds)
+		print("input", input)
+		print("output", output)
+		
+		for patientID in patientIds:
+			crop_test(patientID, generator)
+	
+	if mode == "crop_test":
+		# show two images
+		# one image is the normal size training image with boxes on it
+		# second image is training size image with boxes on it, the boxes calculated from the output
+		generator = DCMGenerator(False, None, None, True)
+		
+		crop_test("3251dea8-4f74-4f4b-8f56-167b0213414b", generator)
+		
 		
 	
 	if mode == "box_test":
@@ -581,7 +607,7 @@ if __name__ == '__main__':
 		boxes = []
 		for otherPatient in allPatients:
 			if patient[kPatientID] == otherPatient[kPatientID]:
-				boxes.append(minMaxCroppedBoxForPatient(otherPatient, 0, 0))
+				boxes.append(minMaxCroppedBoxForPatient(otherPatient, 0, 0, False))
 		
 		colorCroppedDcmImage = Image.fromarray(croppedImage * 255.0).convert("RGB")
 		draw = ImageDraw.Draw(colorCroppedDcmImage)
