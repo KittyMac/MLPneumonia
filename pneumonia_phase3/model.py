@@ -23,37 +23,32 @@ def createModel(loadFromDisk):
 
 	model.add(Conv2D(32, (5, 5), input_shape=(IMG_SIZE[1], IMG_SIZE[0], IMG_SIZE[2])))
 	model.add(Activation('relu'))
-	model.add(BatchNormalization())
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.2))
 	
 	model.add(Conv2D(64, (3, 3)))
 	model.add(Activation('relu'))
-	model.add(BatchNormalization())
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.2))
 	
 	model.add(Conv2D(128, (3, 3)))
 	model.add(Activation('relu'))
-	model.add(BatchNormalization())
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	model.add(Dropout(0.1))
 	
 	model.add(Conv2D(256, (3, 3)))
 	model.add(Activation('relu'))
-	model.add(BatchNormalization())
 	model.add(MaxPooling2D(pool_size=(2, 2)))
 	
 	model.add(Flatten())
 	model.add(Dense(512))
 	model.add(Activation('relu'))
-	model.add(BatchNormalization())
 	model.add(Dense(IMG_SUBDIVIDE+IMG_SUBDIVIDE))
 	model.add(Activation('sigmoid'))
 	
-	model.compile(loss='mse',
-				optimizer="adam",
-				metrics=['mse'])
+	model.compile(loss='binary_crossentropy',
+				optimizer="rmsprop",
+				metrics=['accuracy'])
 
 	print(model.summary())
 	

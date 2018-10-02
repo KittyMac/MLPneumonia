@@ -58,11 +58,13 @@ class DCMGenerator():
 			self.directory = "stage_1_train_images/"
 			self.labelsInfo = GetPhase3PatientInfo()
 			self.validationInfo = []
-			if validationSamples is not None:
+			if ignoreSamples is not None:
 				for patient in self.labelsInfo[:]:
 					if patient[kPatientID] in ignoreSamples:
 						print("ignoring patient: %s" % (patient[kPatientID]))
 						self.labelsInfo.remove(patient)
+			if validationSamples is not None:
+				for patient in self.labelsInfo[:]:
 					if patient[kPatientID] in validationSamples:
 						print("removing patient for validation: %s" % (patient[kPatientID]))
 						self.labelsInfo.remove(patient)
@@ -212,10 +214,14 @@ class DCMGenerator():
 		xOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
 		yOffForImage = int(random.random() * (kMaxImageOffset*2) - kMaxImageOffset)
 		
-		#if self.shouldAugment == False:
+		# for now we're disabling offset augmentation because its buggy...
 		xOffForImage = 0
 		yOffForImage = 0
-		horizontalFlip = True
+		
+		if self.shouldAugment == False:
+			xOffForImage = 0
+			yOffForImage = 0
+			horizontalFlip = False
 
 		imageData = self.loadImageForPatientId(localPatient)
 		imageData = self.simpleImageAugment(imageData,xOffForImage,yOffForImage)
